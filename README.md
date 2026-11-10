@@ -16,9 +16,14 @@ arquivo quando o sistema solicitar.
 - troca automática para a conexão direta na rede local;
 - login Jellyfin e token guardado no armazenamento seguro do aparelho;
 - bibliotecas e itens recentes;
+- navegação por Início, Busca e Minha Lista;
+- busca por filmes, séries e episódios;
+- favoritos sincronizados com o servidor;
+- faixa Continuar assistindo e retomada no ponto exato em qualquer aparelho;
 - detalhes, sinopse, temporadas e lista de episódios;
 - reprodução HLS com transcodificação H.264/AAC pelo servidor;
 - reprodução móvel otimizada em 720p com limite de 3 Mb/s;
+- controles para avançar ou voltar 10 segundos e indicador de carregamento.
 
 ## Executar
 

@@ -30,6 +30,8 @@ class JellyfinApi {
 
   final JellyfinSession? _session;
   final http.Client _client;
+  static const _itemFields =
+      'Overview,BackdropImageTags,ProductionYear,ParentIndexNumber,IndexNumber,UserData';
 
   JellyfinSession get session {
     final value = _session;
@@ -103,7 +105,7 @@ class JellyfinApi {
     final url = normalizeUrl(baseUrl);
     final authorization =
         'MediaBrowser Client="NetPobre", Device="Mobile", '
-        'DeviceId="netpobre-mobile", Version="1.2.0"';
+        'DeviceId="netpobre-mobile", Version="1.3.0"';
     final response = await _client.post(
       Uri.parse('$url/Users/AuthenticateByName'),
       headers: {
@@ -151,8 +153,7 @@ class JellyfinApi {
           queryParameters: {
             'ParentId': parentId,
             'Limit': '20',
-            'Fields':
-                'Overview,BackdropImageTags,ProductionYear,ParentIndexNumber,IndexNumber',
+            'Fields': _itemFields,
             'ImageTypeLimit': '1',
             'EnableImageTypes': 'Primary,Backdrop',
           },
@@ -168,10 +169,7 @@ class JellyfinApi {
   Future<MediaItem> item(String id) async {
     final response = await _get(
       '/Users/${session.userId}/Items/$id',
-      query: {
-        'Fields':
-            'Overview,BackdropImageTags,ProductionYear,ParentIndexNumber,IndexNumber',
-      },
+      query: {'Fields': _itemFields},
     );
     return MediaItem.fromJson(response);
   }
@@ -181,13 +179,127 @@ class JellyfinApi {
       '/Shows/$seriesId/Episodes',
       query: {
         'UserId': session.userId,
-        'Fields':
-            'Overview,BackdropImageTags,ProductionYear,ParentIndexNumber,IndexNumber',
+        'Fields': _itemFields,
         'EnableImages': 'true',
         'ImageTypeLimit': '1',
         'EnableImageTypes': 'Primary,Backdrop',
       },
     );
+    return ((response['Items'] as List?) ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(MediaItem.fromJson)
+        .toList();
+  }
+
+  Future<List<MediaItem>> resume() => _items(
+    '/Users/${session.userId}/Items/Resume',
+    query: {
+      'Limit': '12',
+      'MediaTypes': 'Video',
+      'Fields': _itemFields,
+      'ImageTypeLimit': '1',
+      'EnableImageTypes': 'Primary,Backdrop',
+    },
+  );
+
+  Future<List<MediaItem>> search(String term) {
+    final query = term.trim();
+    if (query.isEmpty) return Future.value(const []);
+    return _items(
+      '/Users/${session.userId}/Items',
+      query: {
+        'Recursive': 'true',
+        'SearchTerm': query,
+        'IncludeItemTypes': 'Movie,Series,Episode',
+        'Limit': '60',
+        'Fields': _itemFields,
+        'ImageTypeLimit': '1',
+        'EnableImageTypes': 'Primary,Backdrop',
+      },
+    );
+  }
+
+  Future<List<MediaItem>> favorites() => _items(
+    '/Users/${session.userId}/Items',
+    query: {
+      'Recursive': 'true',
+      'Filters': 'IsFavorite',
+      'IncludeItemTypes': 'Movie,Series,Episode',
+      'Limit': '100',
+      'Fields': _itemFields,
+      'ImageTypeLimit': '1',
+      'EnableImageTypes': 'Primary,Backdrop',
+    },
+  );
+
+  Future<void> setFavorite(String itemId, bool favorite) async {
+    final uri = Uri.parse(
+      '${session.baseUrl}/Users/${session.userId}/FavoriteItems/$itemId',
+    );
+    final response = favorite
+        ? await _client.post(uri, headers: authHeaders)
+        : await _client.delete(uri, headers: authHeaders);
+    _ensureSuccess(response);
+  }
+
+  Future<void> reportPlaybackStarted(
+    MediaItem item,
+    String playSessionId,
+    Duration position,
+  ) => _reportPlayback('/Sessions/Playing', item, playSessionId, position);
+
+  Future<void> reportPlaybackProgress(
+    MediaItem item,
+    String playSessionId,
+    Duration position, {
+    required bool isPaused,
+  }) => _reportPlayback(
+    '/Sessions/Playing/Progress',
+    item,
+    playSessionId,
+    position,
+    isPaused: isPaused,
+  );
+
+  Future<void> reportPlaybackStopped(
+    MediaItem item,
+    String playSessionId,
+    Duration position,
+  ) => _reportPlayback(
+    '/Sessions/Playing/Stopped',
+    item,
+    playSessionId,
+    position,
+  );
+
+  Future<void> _reportPlayback(
+    String path,
+    MediaItem item,
+    String playSessionId,
+    Duration position, {
+    bool isPaused = false,
+  }) async {
+    final response = await _client.post(
+      Uri.parse('${session.baseUrl}$path'),
+      headers: {...authHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'ItemId': item.id,
+        'MediaSourceId': item.id,
+        'PlaySessionId': playSessionId,
+        'PositionTicks': position.inMicroseconds * 10,
+        'IsPaused': isPaused,
+        'CanSeek': true,
+        'PlayMethod': 'Transcode',
+      }),
+    );
+    _ensureSuccess(response);
+  }
+
+  Future<List<MediaItem>> _items(
+    String path, {
+    Map<String, String>? query,
+  }) async {
+    final response = await _get(path, query: query);
     return ((response['Items'] as List?) ?? const [])
         .cast<Map<String, dynamic>>()
         .map(MediaItem.fromJson)

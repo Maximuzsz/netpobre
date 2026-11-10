@@ -40,6 +40,25 @@ void main() {
     expect(item.backdropTag, 'backdrop-tag');
   });
 
+  test('MediaItem reads resume progress and favorites from UserData', () {
+    final item = MediaItem.fromJson({
+      'Id': 'movie-1',
+      'Name': 'Filme',
+      'Type': 'Movie',
+      'UserData': {
+        'PlaybackPositionTicks': 900000000,
+        'PlayedPercentage': 42.5,
+        'IsFavorite': true,
+        'Played': false,
+      },
+    });
+
+    expect(item.resumePosition, const Duration(seconds: 90));
+    expect(item.progress, 0.425);
+    expect(item.isFavorite, isTrue);
+    expect(item.played, isFalse);
+  });
+
   test('JellyfinSession serializes without losing fields', () {
     const session = JellyfinSession(
       baseUrl: 'https://jellyfin-casa.example.ts.net',

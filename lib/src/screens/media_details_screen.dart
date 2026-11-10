@@ -16,21 +16,51 @@ class MediaDetailsScreen extends StatefulWidget {
 }
 
 class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
+  late MediaItem _item = widget.item;
+  bool _favoriteBusy = false;
   late final Future<List<MediaItem>>? _episodes = widget.item.type == 'Series'
       ? widget.api.episodes(widget.item.id)
       : null;
 
-  void _play(BuildContext context, MediaItem item) {
-    Navigator.of(context).push(
+  Future<void> _play(BuildContext context, MediaItem item) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PlayerScreen(api: widget.api, item: item),
       ),
     );
+    if (!mounted) return;
+    try {
+      final updated = await widget.api.item(_item.id);
+      if (mounted) setState(() => _item = updated);
+    } catch (_) {
+      // A reprodução não deve parecer ter falhado se apenas a atualização
+      // dos metadados estiver temporariamente indisponível.
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_favoriteBusy) return;
+    final next = !_item.isFavorite;
+    setState(() => _favoriteBusy = true);
+    try {
+      await widget.api.setFavorite(_item.id, next);
+      if (mounted) setState(() => _item = _item.copyWith(isFavorite: next));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível atualizar sua lista.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _favoriteBusy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final item = widget.item;
+    final item = _item;
     final title = item.seriesName ?? item.name;
     return Scaffold(
       body: CustomScrollView(
@@ -91,12 +121,38 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
                   ),
                 ],
                 const SizedBox(height: 22),
-                if (item.playable)
-                  FilledButton.icon(
-                    onPressed: () => _play(context, item),
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text('Assistir agora'),
-                  ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    if (item.playable)
+                      FilledButton.icon(
+                        onPressed: () => _play(context, item),
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: Text(
+                          item.resumePosition > const Duration(seconds: 30)
+                              ? 'Continuar'
+                              : 'Assistir agora',
+                        ),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: _favoriteBusy ? null : _toggleFavorite,
+                      icon: _favoriteBusy
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              item.isFavorite
+                                  ? Icons.bookmark_rounded
+                                  : Icons.bookmark_border_rounded,
+                            ),
+                      label: Text(
+                        item.isFavorite ? 'Na minha lista' : 'Minha lista',
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 24),
                 Text(
                   item.overview?.trim().isNotEmpty == true

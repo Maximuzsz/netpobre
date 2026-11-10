@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -18,7 +20,11 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> {
   late final VideoPlayerController _controller;
+  late final String _playSessionId =
+      '${widget.item.id}-${DateTime.now().microsecondsSinceEpoch}';
   bool _controls = true;
+  bool _started = false;
+  Duration _lastReported = Duration.zero;
   String? _error;
 
   @override
@@ -29,35 +35,90 @@ class _PlayerScreenState extends State<PlayerScreen> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    _controller =
-        VideoPlayerController.networkUrl(
-            widget.api.playbackUrl(widget.item),
-            httpHeaders: widget.api.authHeaders,
-          )
-          ..initialize()
-              .then((_) {
-                if (!mounted) return;
-                setState(() {});
-                _controller.play();
-              })
-              .catchError((_) {
-                if (mounted) {
-                  setState(
-                    () => _error =
-                        'Não foi possível iniciar o vídeo. Verifique a conexão.',
-                  );
-                }
-              });
+    _controller = VideoPlayerController.networkUrl(
+      widget.api.playbackUrl(widget.item),
+      httpHeaders: widget.api.authHeaders,
+    );
     _controller.addListener(_tick);
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      await _controller.initialize();
+      if (!mounted) return;
+      final resume = widget.item.resumePosition;
+      final duration = _controller.value.duration;
+      if (resume > const Duration(seconds: 30) &&
+          resume < duration - const Duration(seconds: 30)) {
+        await _controller.seekTo(resume);
+      }
+      _started = true;
+      _ignore(
+        widget.api.reportPlaybackStarted(
+          widget.item,
+          _playSessionId,
+          _controller.value.position,
+        ),
+      );
+      await _controller.play();
+      if (mounted) setState(() {});
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () =>
+              _error = 'Não foi possível iniciar o vídeo. Verifique a conexão.',
+        );
+      }
+    }
   }
 
   void _tick() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final value = _controller.value;
+    if (_started &&
+        (value.position - _lastReported).abs() >= const Duration(seconds: 10)) {
+      _lastReported = value.position;
+      _ignore(
+        widget.api.reportPlaybackProgress(
+          widget.item,
+          _playSessionId,
+          value.position,
+          isPaused: !value.isPlaying,
+        ),
+      );
+    }
+    setState(() {});
+  }
+
+  void _ignore(Future<void> future) {
+    unawaited(future.catchError((_) {}));
+  }
+
+  Future<void> _seekBy(Duration offset) async {
+    final value = _controller.value;
+    final target = value.position + offset;
+    await _controller.seekTo(
+      target < Duration.zero
+          ? Duration.zero
+          : target > value.duration
+          ? value.duration
+          : target,
+    );
   }
 
   @override
   void dispose() {
     _controller.removeListener(_tick);
+    if (_started) {
+      _ignore(
+        widget.api.reportPlaybackStopped(
+          widget.item,
+          _playSessionId,
+          _controller.value.position,
+        ),
+      );
+    }
     _controller.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
@@ -136,20 +197,41 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         ],
                       ),
                       const Spacer(),
-                      IconButton.filled(
-                        onPressed: () => value.isPlaying
-                            ? _controller.pause()
-                            : _controller.play(),
-                        style: IconButton.styleFrom(
-                          backgroundColor: CasaFlixColors.amber,
-                          foregroundColor: CasaFlixColors.night,
-                        ),
-                        iconSize: 42,
-                        icon: Icon(
-                          value.isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            tooltip: 'Voltar 10 segundos',
+                            onPressed: () =>
+                                _seekBy(const Duration(seconds: -10)),
+                            iconSize: 38,
+                            icon: const Icon(Icons.replay_10_rounded),
+                          ),
+                          const SizedBox(width: 26),
+                          IconButton.filled(
+                            onPressed: () => value.isPlaying
+                                ? _controller.pause()
+                                : _controller.play(),
+                            style: IconButton.styleFrom(
+                              backgroundColor: CasaFlixColors.amber,
+                              foregroundColor: CasaFlixColors.night,
+                            ),
+                            iconSize: 42,
+                            icon: Icon(
+                              value.isPlaying
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 26),
+                          IconButton(
+                            tooltip: 'Avançar 10 segundos',
+                            onPressed: () =>
+                                _seekBy(const Duration(seconds: 10)),
+                            iconSize: 38,
+                            icon: const Icon(Icons.forward_10_rounded),
+                          ),
+                        ],
                       ),
                       const Spacer(),
                       Padding(
@@ -183,6 +265,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                 ),
               ),
+            if (value.isBuffering && value.isInitialized)
+              const Center(child: CircularProgressIndicator()),
           ],
         ),
       ),
