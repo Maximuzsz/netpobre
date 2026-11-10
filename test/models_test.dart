@@ -154,7 +154,7 @@ void main() {
     expect(segment.contains(const Duration(seconds: 20)), isTrue);
   });
 
-  test('offline download requests a mobile-compatible MP4', () {
+  test('offline download uses the Jellyfin direct-download endpoint', () {
     const session = JellyfinSession(
       baseUrl: 'https://netpobre.example.ts.net',
       token: 'token',
@@ -164,10 +164,9 @@ void main() {
     );
     const item = MediaItem(id: 'video-1', name: 'Filme', type: 'Movie');
 
-    final url = JellyfinApi(session: session).offlineDownloadUrl(item);
+    final url = JellyfinApi(session: session).downloadUrl(item);
 
-    expect(url.path, endsWith('/stream.mp4'));
-    expect(url.queryParameters['VideoCodec'], 'h264');
-    expect(url.queryParameters['MaxHeight'], '720');
+    expect(url.path, '/Items/video-1/Download');
+    expect(url.queryParameters, isEmpty);
   });
 }

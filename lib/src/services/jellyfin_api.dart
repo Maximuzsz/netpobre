@@ -475,22 +475,6 @@ class JellyfinApi {
   Uri downloadUrl(MediaItem item) =>
       Uri.parse('${session.baseUrl}/Items/${item.id}/Download');
 
-  Uri offlineDownloadUrl(MediaItem item) =>
-      Uri.parse('${session.baseUrl}/Videos/${item.id}/stream.mp4').replace(
-        queryParameters: {
-          'Static': 'false',
-          'MediaSourceId': item.id,
-          'VideoCodec': 'h264',
-          'AudioCodec': 'aac',
-          'VideoBitRate': '2600000',
-          'AudioBitRate': '128000',
-          'MaxWidth': '1280',
-          'MaxHeight': '720',
-          'SubtitleStreamIndex': '-1',
-          'SubtitleMethod': 'Encode',
-        },
-      );
-
   Uri trickplayUrl(
     MediaItem item,
     TrickplayInfo info,

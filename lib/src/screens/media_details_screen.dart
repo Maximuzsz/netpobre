@@ -53,6 +53,12 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         },
       );
       if (mounted) setState(() => _downloaded = true);
+    } on JellyfinException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -82,6 +88,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       messenger.showSnackBar(
         SnackBar(content: Text('${episode.name} disponível offline.')),
       );
+    } on JellyfinException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Não foi possível baixar o episódio.')),
