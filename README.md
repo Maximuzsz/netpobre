@@ -18,6 +18,8 @@ arquivo quando o sistema solicitar.
 - bibliotecas e itens recentes;
 - navegação por Início, Busca e Minha Lista;
 - busca por filmes, séries e episódios;
+- títulos e sinopses em português, com o título original preservado;
+- atualização de metadados em português pelo menu da conta;
 - favoritos sincronizados com o servidor;
 - faixa Continuar assistindo e retomada no ponto exato em qualquer aparelho;
 - detalhes, sinopse, temporadas e lista de episódios;

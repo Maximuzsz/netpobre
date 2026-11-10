@@ -31,7 +31,7 @@ class JellyfinApi {
   final JellyfinSession? _session;
   final http.Client _client;
   static const _itemFields =
-      'Overview,BackdropImageTags,ProductionYear,ParentIndexNumber,IndexNumber,UserData';
+      'Overview,OriginalTitle,BackdropImageTags,ProductionYear,ParentIndexNumber,IndexNumber,UserData';
 
   JellyfinSession get session {
     final value = _session;
@@ -42,6 +42,7 @@ class JellyfinApi {
   Map<String, String> get authHeaders => {
     'Authorization': 'MediaBrowser Token="${session.token}"',
     'X-Emby-Token': session.token,
+    'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.5',
   };
 
   static String normalizeUrl(String value) {
@@ -105,7 +106,7 @@ class JellyfinApi {
     final url = normalizeUrl(baseUrl);
     final authorization =
         'MediaBrowser Client="NetPobre", Device="Mobile", '
-        'DeviceId="netpobre-mobile", Version="1.3.0"';
+        'DeviceId="netpobre-mobile", Version="1.4.0"';
     final response = await _client.post(
       Uri.parse('$url/Users/AuthenticateByName'),
       headers: {
@@ -240,6 +241,27 @@ class JellyfinApi {
         ? await _client.post(uri, headers: authHeaders)
         : await _client.delete(uri, headers: authHeaders);
     _ensureSuccess(response);
+  }
+
+  Future<void> refreshPortugueseMetadata() async {
+    final libraries = await views();
+    final targets = libraries.where(
+      (view) =>
+          view.collectionType == 'movies' || view.collectionType == 'tvshows',
+    );
+    for (final library in targets) {
+      final uri = Uri.parse('${session.baseUrl}/Items/${library.id}/Refresh')
+          .replace(
+            queryParameters: {
+              'metadataRefreshMode': 'FullRefresh',
+              'imageRefreshMode': 'None',
+              'replaceAllMetadata': 'true',
+              'replaceAllImages': 'false',
+            },
+          );
+      final response = await _client.post(uri, headers: authHeaders);
+      _ensureSuccess(response);
+    }
   }
 
   Future<void> reportPlaybackStarted(

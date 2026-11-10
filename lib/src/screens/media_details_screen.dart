@@ -103,6 +103,16 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
                     letterSpacing: -1,
                   ),
                 ),
+                if (item.originalTitle != null &&
+                    item.originalTitle!.trim().isNotEmpty &&
+                    item.originalTitle!.trim().toLowerCase() !=
+                        title.trim().toLowerCase()) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Título original: ${item.originalTitle}',
+                    style: const TextStyle(color: CasaFlixColors.muted),
+                  ),
+                ],
                 if (item.seriesName != null) ...[
                   const SizedBox(height: 6),
                   Text(

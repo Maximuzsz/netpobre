@@ -24,6 +24,7 @@ void main() {
     final item = MediaItem.fromJson({
       'Id': 'episode-1',
       'Name': 'Casa',
+      'OriginalTitle': 'Home',
       'Type': 'Episode',
       'SeriesName': 'Ted Lasso',
       'ParentIndexNumber': 4,
@@ -34,6 +35,7 @@ void main() {
 
     expect(item.playable, isTrue);
     expect(item.seriesName, 'Ted Lasso');
+    expect(item.originalTitle, 'Home');
     expect(item.parentIndexNumber, 4);
     expect(item.indexNumber, 1);
     expect(item.imageTag, 'poster-tag');
@@ -86,5 +88,19 @@ void main() {
     expect(url.queryParameters['MaxStreamingBitrate'], '3000000');
     expect(url.queryParameters['VideoBitRate'], '2600000');
     expect(url.queryParameters['MaxHeight'], '720');
+  });
+
+  test('authenticated requests prefer Brazilian Portuguese metadata', () {
+    const session = JellyfinSession(
+      baseUrl: 'https://netpobre.example.ts.net',
+      token: 'token',
+      userId: 'user-1',
+      userName: 'netpobre',
+      serverName: 'NetPobre',
+    );
+
+    final headers = JellyfinApi(session: session).authHeaders;
+
+    expect(headers['Accept-Language'], startsWith('pt-BR'));
   });
 }

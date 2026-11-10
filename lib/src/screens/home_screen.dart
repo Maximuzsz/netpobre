@@ -57,6 +57,33 @@ class _HomeScreenState extends State<HomeScreen> {
     _refresh();
   }
 
+  Future<void> _refreshPortugueseTitles() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.api.refreshPortugueseMetadata();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Atualização iniciada. Os títulos em português aparecerão aos poucos.',
+          ),
+        ),
+      );
+      _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            error is JellyfinException
+                ? error.toString()
+                : 'Não foi possível atualizar os títulos.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -126,6 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: _Header(
                     session: widget.session,
                     onLogout: widget.onLogout,
+                    onRefreshTitles: _refreshPortugueseTitles,
                   ),
                 ),
                 if (shelves.isEmpty && data.resume.isEmpty)
@@ -172,9 +200,14 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.session, required this.onLogout});
+  const _Header({
+    required this.session,
+    required this.onLogout,
+    required this.onRefreshTitles,
+  });
   final JellyfinSession session;
   final VoidCallback onLogout;
+  final Future<void> Function() onRefreshTitles;
 
   @override
   Widget build(BuildContext context) {
@@ -192,9 +225,25 @@ class _Header extends StatelessWidget {
             tooltip: 'Conta',
             onSelected: (value) {
               if (value == 'logout') onLogout();
+              if (value == 'refresh_titles') onRefreshTitles();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'logout', child: Text('Sair')),
+              PopupMenuItem(
+                value: 'refresh_titles',
+                child: ListTile(
+                  leading: Icon(Icons.translate_rounded),
+                  title: Text('Atualizar títulos em português'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  leading: Icon(Icons.logout_rounded),
+                  title: Text('Sair'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
             ],
             icon: const Icon(Icons.account_circle_outlined),
           ),

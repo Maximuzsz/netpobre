@@ -3,6 +3,7 @@ class MediaItem {
     required this.id,
     required this.name,
     required this.type,
+    this.originalTitle,
     this.overview,
     this.seriesName,
     this.imageTag,
@@ -19,6 +20,7 @@ class MediaItem {
   final String id;
   final String name;
   final String type;
+  final String? originalTitle;
   final String? overview;
   final String? seriesName;
   final String? imageTag;
@@ -43,6 +45,7 @@ class MediaItem {
       id: json['Id'] as String,
       name: (json['Name'] as String?) ?? 'Sem título',
       type: (json['Type'] as String?) ?? 'Unknown',
+      originalTitle: json['OriginalTitle'] as String?,
       overview: json['Overview'] as String?,
       seriesName: json['SeriesName'] as String?,
       imageTag: (json['ImageTags'] as Map?)?['Primary'] as String?,
@@ -65,6 +68,7 @@ class MediaItem {
     id: id,
     name: name,
     type: type,
+    originalTitle: originalTitle,
     overview: overview,
     seriesName: seriesName,
     imageTag: imageTag,
