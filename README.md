@@ -3,6 +3,9 @@
 Aplicativo Flutter privado para acessar o servidor doméstico **NetPobre** no
 Android e iOS.
 
+O mascote oficial é uma televisão de papelão remendada: simples, bem-humorada
+e reconhecível mesmo no ícone pequeno do celular ou da televisão.
+
 ## Baixar para Android
 
 Baixe a versão mais recente em

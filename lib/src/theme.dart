@@ -77,22 +77,14 @@ class CasaFlixMark extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: CasaFlixColors.sky,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(size * .48),
-              topRight: Radius.circular(size * .12),
-              bottomLeft: Radius.circular(size * .12),
-              bottomRight: Radius.circular(size * .48),
-            ),
-          ),
-          child: Icon(
-            Icons.play_arrow_rounded,
-            color: CasaFlixColors.night,
-            size: size * .7,
+        ClipRRect(
+          borderRadius: BorderRadius.circular(size * .22),
+          child: Image.asset(
+            'assets/branding/netpobre-icon-1024.png',
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.medium,
           ),
         ),
         if (showName) ...[
