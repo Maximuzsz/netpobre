@@ -25,10 +25,13 @@ class _CasaFlixAppState extends State<CasaFlixApp> {
   @override
   void initState() {
     super.initState();
-    _restore();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restore());
   }
 
   Future<void> _restore() async {
+    final minimumSplash = Future<void>.delayed(
+      const Duration(milliseconds: 2300),
+    );
     var session = await _store.read();
     final profiles = await _store.readAll();
     if (session != null) {
@@ -45,6 +48,7 @@ class _CasaFlixAppState extends State<CasaFlixApp> {
         // The home screen provides retry and server switching when offline.
       }
     }
+    await minimumSplash;
     if (!mounted) return;
     setState(() {
       _session = session;
@@ -122,21 +126,192 @@ class _CasaFlixAppState extends State<CasaFlixApp> {
   }
 }
 
-class _BootScreen extends StatelessWidget {
+class _BootScreen extends StatefulWidget {
   const _BootScreen();
 
   @override
+  State<_BootScreen> createState() => _BootScreenState();
+}
+
+class _BootScreenState extends State<_BootScreen>
+    with TickerProviderStateMixin {
+  late final AnimationController _intro;
+  late final AnimationController _idle;
+  bool _reduceMotion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _intro = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1450),
+    );
+    _idle = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    );
+    _intro.forward().whenComplete(() {
+      if (mounted && !_reduceMotion) _idle.repeat(reverse: true);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (_reduceMotion) {
+      _intro.value = 1;
+      _idle.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _intro.dispose();
+    _idle.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CasaFlixMark(size: 58),
-            SizedBox(height: 24),
-            CircularProgressIndicator(),
-          ],
-        ),
+    return Scaffold(
+      backgroundColor: CasaFlixColors.night,
+      body: AnimatedBuilder(
+        animation: Listenable.merge([_intro, _idle]),
+        builder: (context, _) {
+          final intro = _intro.value;
+          final mascotOpacity = Curves.easeOut.transform(
+            const Interval(0, .24).transform(intro),
+          );
+          final mascotScale = TweenSequence<double>([
+            TweenSequenceItem(
+              tween: Tween(
+                begin: .62,
+                end: 1.08,
+              ).chain(CurveTween(curve: Curves.easeOutBack)),
+              weight: 68,
+            ),
+            TweenSequenceItem(tween: Tween(begin: 1.08, end: 1), weight: 32),
+          ]).transform(const Interval(0, .62).transform(intro));
+          final nameProgress = Curves.easeOutCubic.transform(
+            const Interval(.38, .72).transform(intro),
+          );
+          final loadingProgress = Curves.easeOut.transform(
+            const Interval(.68, 1).transform(intro),
+          );
+          final breathing = 1 + (_idle.value * .018);
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 230,
+                      height: 230,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Opacity(
+                            opacity: mascotOpacity * .46,
+                            child: Transform.scale(
+                              scale: .72 + (_idle.value * .08),
+                              child: const DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: RadialGradient(
+                                    colors: [
+                                      Color(0xAAF4B860),
+                                      Color(0x0058C7F3),
+                                    ],
+                                  ),
+                                ),
+                                child: SizedBox.square(dimension: 218),
+                              ),
+                            ),
+                          ),
+                          Opacity(
+                            opacity: mascotOpacity,
+                            child: Transform.rotate(
+                              angle:
+                                  (1 - intro).clamp(0.0, 1.0).toDouble() *
+                                  -.045,
+                              child: Transform.scale(
+                                scale: mascotScale * breathing,
+                                child: Image.asset(
+                                  'assets/branding/netpobre-mascot-splash.png',
+                                  width: 205,
+                                  height: 205,
+                                  filterQuality: FilterQuality.high,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Transform.translate(
+                      offset: Offset(0, 18 * (1 - nameProgress)),
+                      child: Opacity(
+                        opacity: nameProgress,
+                        child: const Text(
+                          'NetPobre',
+                          style: TextStyle(
+                            color: CasaFlixColors.ivory,
+                            fontSize: 38,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -1.8,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 36),
+                    Opacity(
+                      opacity: loadingProgress,
+                      child: SizedBox(
+                        width: 132,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            minHeight: 4,
+                            backgroundColor: CasaFlixColors.ink,
+                            color: CasaFlixColors.amber,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Opacity(
+                      opacity: loadingProgress,
+                      child: const Text(
+                        'Ligando a TV de casa…',
+                        style: TextStyle(
+                          color: CasaFlixColors.muted,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 34,
+                child: Opacity(
+                  opacity: loadingProgress * .7,
+                  child: const Text(
+                    'Filme bom. Orçamento honesto.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: CasaFlixColors.muted, fontSize: 12),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
