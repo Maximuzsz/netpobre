@@ -26,6 +26,14 @@ arquivo quando o sistema solicitar.
 - reprodução HLS com transcodificação H.264/AAC pelo servidor;
 - reprodução móvel otimizada em 720p com limite de 3 Mb/s;
 - controles para avançar ou voltar 10 segundos e indicador de carregamento.
+- próximo episódio com contagem e reprodução automática;
+- seleção de áudio, legenda e qualidade entre 480p, 720p e 1080p;
+- botões para pular abertura, resumo e créditos quando disponíveis;
+- miniaturas de navegação geradas pelo Jellyfin;
+- recomendações e faixa A seguir;
+- múltiplos perfis Jellyfin com histórico independente;
+- login por código para televisão e navegação por controle remoto;
+- downloads para reprodução offline no aparelho.
 
 ## Executar
 

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/jellyfin_session.dart';
 import '../models/media_item.dart';
+import '../models/playback.dart';
 
 class JellyfinException implements Exception {
   const JellyfinException(this.message);
@@ -31,7 +32,7 @@ class JellyfinApi {
   final JellyfinSession? _session;
   final http.Client _client;
   static const _itemFields =
-      'Overview,OriginalTitle,BackdropImageTags,ProductionYear,ParentIndexNumber,IndexNumber,UserData';
+      'Overview,OriginalTitle,BackdropImageTags,ProductionYear,ParentIndexNumber,IndexNumber,SeriesId,UserData,Trickplay';
 
   JellyfinSession get session {
     final value = _session;
@@ -43,6 +44,15 @@ class JellyfinApi {
     'Authorization': 'MediaBrowser Token="${session.token}"',
     'X-Emby-Token': session.token,
     'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.5',
+  };
+
+  static const deviceAuthorization =
+      'MediaBrowser Client="NetPobre", Device="Mobile e TV", '
+      'DeviceId="netpobre-client", Version="1.5.0"';
+
+  static const deviceHeaders = {
+    'Authorization': deviceAuthorization,
+    'X-Emby-Authorization': deviceAuthorization,
   };
 
   static String normalizeUrl(String value) {
@@ -104,16 +114,9 @@ class JellyfinApi {
     required String password,
   }) async {
     final url = normalizeUrl(baseUrl);
-    final authorization =
-        'MediaBrowser Client="NetPobre", Device="Mobile", '
-        'DeviceId="netpobre-mobile", Version="1.4.0"';
     final response = await _client.post(
       Uri.parse('$url/Users/AuthenticateByName'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': authorization,
-        'X-Emby-Authorization': authorization,
-      },
+      headers: {'Content-Type': 'application/json', ...deviceHeaders},
       body: jsonEncode({'Username': username.trim(), 'Pw': password}),
     );
 
@@ -126,16 +129,66 @@ class JellyfinApi {
       );
     }
 
+    return _sessionFromAuthentication(url, response.body);
+  }
+
+  Future<QuickConnectCode> initiateQuickConnect(String baseUrl) async {
+    final url = normalizeUrl(baseUrl);
+    final response = await _client.post(
+      Uri.parse('$url/QuickConnect/Initiate'),
+      headers: deviceHeaders,
+    );
+    _ensurePublicSuccess(response);
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final user = json['User'] as Map<String, dynamic>;
-    final info = await publicInfo(url);
-    return JellyfinSession(
+    return QuickConnectCode(
       baseUrl: url,
+      code: json['Code'] as String,
+      secret: json['Secret'] as String,
+    );
+  }
+
+  Future<bool> quickConnectAuthorized(QuickConnectCode code) async {
+    final uri = Uri.parse(
+      '${code.baseUrl}/QuickConnect/Connect',
+    ).replace(queryParameters: {'Secret': code.secret});
+    final response = await _client.get(uri, headers: deviceHeaders);
+    _ensurePublicSuccess(response);
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return json['Authenticated'] as bool? ?? false;
+  }
+
+  Future<JellyfinSession> authenticateQuickConnect(
+    QuickConnectCode code,
+  ) async {
+    final response = await _client.post(
+      Uri.parse('${code.baseUrl}/Users/AuthenticateWithQuickConnect'),
+      headers: {...deviceHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({'Secret': code.secret}),
+    );
+    _ensurePublicSuccess(response);
+    return _sessionFromAuthentication(code.baseUrl, response.body);
+  }
+
+  Future<JellyfinSession> _sessionFromAuthentication(
+    String baseUrl,
+    String body,
+  ) async {
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    final user = json['User'] as Map<String, dynamic>;
+    final info = await publicInfo(baseUrl);
+    return JellyfinSession(
+      baseUrl: baseUrl,
       token: json['AccessToken'] as String,
       userId: user['Id'] as String,
       userName: user['Name'] as String,
       serverName: (info['ServerName'] as String?) ?? 'Jellyfin Casa',
     );
+  }
+
+  void _ensurePublicSuccess(http.Response response) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw JellyfinException('O servidor respondeu ${response.statusCode}.');
+    }
   }
 
   Future<List<MediaView>> views() async {
@@ -203,6 +256,61 @@ class JellyfinApi {
     },
   );
 
+  Future<List<MediaItem>> nextUp({String? seriesId, int limit = 12}) => _items(
+    '/Shows/NextUp',
+    query: {
+      'UserId': session.userId,
+      'Limit': '$limit',
+      'SeriesId': ?seriesId,
+      'Fields': _itemFields,
+      'EnableImages': 'true',
+      'ImageTypeLimit': '1',
+      'EnableImageTypes': 'Primary,Backdrop',
+      'EnableUserData': 'true',
+    },
+  );
+
+  Future<List<RecommendationShelf>> recommendations() async {
+    final uri = Uri.parse('${session.baseUrl}/Movies/Recommendations').replace(
+      queryParameters: {
+        'UserId': session.userId,
+        'CategoryLimit': '4',
+        'ItemLimit': '12',
+        'Fields': _itemFields,
+      },
+    );
+    final response = await _client.get(uri, headers: authHeaders);
+    _ensureSuccess(response);
+    return (jsonDecode(response.body) as List)
+        .cast<Map<String, dynamic>>()
+        .map(RecommendationShelf.fromJson)
+        .where((shelf) => shelf.items.isNotEmpty)
+        .toList();
+  }
+
+  Future<PlaybackInfo> playbackInfo(MediaItem item) async {
+    final response = await _get(
+      '/Items/${item.id}/PlaybackInfo',
+      query: {'UserId': session.userId},
+    );
+    return PlaybackInfo.fromJson(response);
+  }
+
+  Future<List<MediaSegment>> mediaSegments(MediaItem item) async {
+    try {
+      final response = await _get(
+        '/MediaSegments/${item.id}',
+        query: {'IncludeSegmentTypes': 'Intro,Outro,Recap,Commercial,Preview'},
+      );
+      return ((response['Items'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map(MediaSegment.fromJson)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<List<MediaItem>> search(String term) {
     final query = term.trim();
     if (query.isEmpty) return Future.value(const []);
@@ -262,6 +370,35 @@ class JellyfinApi {
       final response = await _client.post(uri, headers: authHeaders);
       _ensureSuccess(response);
     }
+  }
+
+  Future<List<String>> runMediaPreparationTasks() async {
+    final response = await _client.get(
+      Uri.parse('${session.baseUrl}/ScheduledTasks'),
+      headers: authHeaders,
+    );
+    _ensureSuccess(response);
+    final tasks = (jsonDecode(response.body) as List)
+        .cast<Map<String, dynamic>>();
+    final selected = tasks.where((task) {
+      final text = '${task['Name']} ${task['Key']}'.toLowerCase();
+      return text.contains('segment') ||
+          text.contains('trickplay') ||
+          text.contains('subtitle');
+    });
+    final started = <String>[];
+    for (final task in selected) {
+      final id = task['Id'] as String?;
+      if (id == null || task['State'] == 'Running') continue;
+      final start = await _client.post(
+        Uri.parse('${session.baseUrl}/ScheduledTasks/Running/$id'),
+        headers: authHeaders,
+      );
+      if (start.statusCode >= 200 && start.statusCode < 300) {
+        started.add((task['Name'] as String?) ?? 'Tarefa de mídia');
+      }
+    }
+    return started;
   }
 
   Future<void> reportPlaybackStarted(
@@ -335,7 +472,49 @@ class JellyfinApi {
     return '${session.baseUrl}/Items/${item.id}/Images/$type?maxWidth=$width&quality=88';
   }
 
-  Uri playbackUrl(MediaItem item) {
+  Uri downloadUrl(MediaItem item) =>
+      Uri.parse('${session.baseUrl}/Items/${item.id}/Download');
+
+  Uri offlineDownloadUrl(MediaItem item) =>
+      Uri.parse('${session.baseUrl}/Videos/${item.id}/stream.mp4').replace(
+        queryParameters: {
+          'Static': 'false',
+          'MediaSourceId': item.id,
+          'VideoCodec': 'h264',
+          'AudioCodec': 'aac',
+          'VideoBitRate': '2600000',
+          'AudioBitRate': '128000',
+          'MaxWidth': '1280',
+          'MaxHeight': '720',
+          'SubtitleStreamIndex': '-1',
+          'SubtitleMethod': 'Encode',
+        },
+      );
+
+  Uri trickplayUrl(
+    MediaItem item,
+    TrickplayInfo info,
+    int spriteIndex,
+  ) => Uri.parse(
+    '${session.baseUrl}/Videos/${item.id}/Trickplay/${info.width}/$spriteIndex.jpg',
+  ).replace(queryParameters: {'MediaSourceId': info.mediaSourceId});
+
+  Uri playbackUrl(
+    MediaItem item, {
+    PlaybackQuality quality = PlaybackQuality.automatic,
+    int? audioStreamIndex,
+    int? subtitleStreamIndex,
+  }) {
+    final isLocal = session.baseUrl.startsWith('http://');
+    final selected = quality == PlaybackQuality.automatic
+        ? (isLocal ? PlaybackQuality.home : PlaybackQuality.balanced)
+        : quality;
+    final (maxBitrate, videoBitrate, maxWidth, maxHeight) = switch (selected) {
+      PlaybackQuality.economy => ('1400000', '1150000', '854', '480'),
+      PlaybackQuality.balanced => ('3000000', '2600000', '1280', '720'),
+      PlaybackQuality.home => ('8000000', '7400000', '1920', '1080'),
+      PlaybackQuality.automatic => ('3000000', '2600000', '1280', '720'),
+    };
     return Uri.parse(
       '${session.baseUrl}/Videos/${item.id}/master.m3u8',
     ).replace(
@@ -344,11 +523,14 @@ class JellyfinApi {
         'MediaSourceId': item.id,
         'VideoCodec': 'h264',
         'AudioCodec': 'aac',
-        'MaxStreamingBitrate': '3000000',
-        'VideoBitRate': '2600000',
+        'MaxStreamingBitrate': maxBitrate,
+        'VideoBitRate': videoBitrate,
         'AudioBitRate': '128000',
-        'MaxWidth': '1280',
-        'MaxHeight': '720',
+        'MaxWidth': maxWidth,
+        'MaxHeight': maxHeight,
+        if (audioStreamIndex != null) 'AudioStreamIndex': '$audioStreamIndex',
+        if (subtitleStreamIndex != null)
+          'SubtitleStreamIndex': '$subtitleStreamIndex',
         'SegmentContainer': 'ts',
         'MinSegments': '1',
         'BreakOnNonKeyFrames': 'true',
@@ -376,4 +558,36 @@ class JellyfinApi {
       throw JellyfinException('O servidor respondeu ${response.statusCode}.');
     }
   }
+}
+
+class RecommendationShelf {
+  const RecommendationShelf({required this.title, required this.items});
+
+  final String title;
+  final List<MediaItem> items;
+
+  factory RecommendationShelf.fromJson(Map<String, dynamic> json) {
+    final baseline = (json['BaselineItemName'] as String?)?.trim();
+    return RecommendationShelf(
+      title: baseline == null || baseline.isEmpty
+          ? 'Escolhas para você'
+          : 'Porque você assistiu $baseline',
+      items: ((json['Items'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map(MediaItem.fromJson)
+          .toList(),
+    );
+  }
+}
+
+class QuickConnectCode {
+  const QuickConnectCode({
+    required this.baseUrl,
+    required this.code,
+    required this.secret,
+  });
+
+  final String baseUrl;
+  final String code;
+  final String secret;
 }

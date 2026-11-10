@@ -5,6 +5,7 @@ import '../models/media_item.dart';
 import '../services/jellyfin_api.dart';
 import '../theme.dart';
 import 'media_details_screen.dart';
+import 'downloads_screen.dart';
 import 'my_list_screen.dart';
 import 'search_screen.dart';
 
@@ -14,11 +15,13 @@ class HomeScreen extends StatefulWidget {
     required this.api,
     required this.session,
     required this.onLogout,
+    required this.onSwitchProfile,
   });
 
   final JellyfinApi api;
   final JellyfinSession session;
   final VoidCallback onLogout;
+  final VoidCallback onSwitchProfile;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -27,6 +30,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late Future<_HomeData> _content;
   final _myListKey = GlobalKey<MyListScreenState>();
+  final _downloadsKey = GlobalKey<DownloadsScreenState>();
   int _tab = 0;
 
   @override
@@ -36,14 +40,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<_HomeData> _load() async {
-    final resume = await widget.api.resume();
+    final results = await Future.wait<dynamic>([
+      widget.api.resume(),
+      widget.api.nextUp(),
+      widget.api.recommendations(),
+    ]);
+    final resume = results[0] as List<MediaItem>;
+    final nextUp = results[1] as List<MediaItem>;
+    final recommendations = results[2] as List<RecommendationShelf>;
     final views = await widget.api.views();
     final shelves = <_Shelf>[];
     for (final view in views) {
       final items = await widget.api.latest(view.id);
       if (items.isNotEmpty) shelves.add(_Shelf(view.name, items));
     }
-    return _HomeData(resume: resume, shelves: shelves);
+    shelves.addAll(
+      recommendations.map((group) => _Shelf(group.title, group.items)),
+    );
+    return _HomeData(resume: resume, nextUp: nextUp, shelves: shelves);
   }
 
   void _refresh() => setState(() => _content = _load());
@@ -84,6 +98,32 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _prepareServerMedia() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final tasks = await widget.api.runMediaPreparationTasks();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            tasks.isEmpty
+                ? 'Os recursos de mídia já estão sendo preparados.'
+                : 'Preparação iniciada: ${tasks.join(', ')}.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Use uma conta administradora para preparar o servidor.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -93,6 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildHome(),
           SearchScreen(api: widget.api),
           MyListScreen(key: _myListKey, api: widget.api),
+          DownloadsScreen(key: _downloadsKey),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -100,6 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onDestinationSelected: (index) {
           setState(() => _tab = index);
           if (index == 2) _myListKey.currentState?.refresh();
+          if (index == 3) _downloadsKey.currentState?.refresh();
         },
         destinations: const [
           NavigationDestination(
@@ -115,6 +157,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.bookmark_border_rounded),
             selectedIcon: Icon(Icons.bookmark_rounded),
             label: 'Minha Lista',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.download_outlined),
+            selectedIcon: Icon(Icons.download_rounded),
+            label: 'Downloads',
           ),
         ],
       ),
@@ -153,10 +200,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: _Header(
                     session: widget.session,
                     onLogout: widget.onLogout,
+                    onSwitchProfile: widget.onSwitchProfile,
+                    onPrepareServer: _prepareServerMedia,
                     onRefreshTitles: _refreshPortugueseTitles,
                   ),
                 ),
-                if (shelves.isEmpty && data.resume.isEmpty)
+                if (shelves.isEmpty &&
+                    data.resume.isEmpty &&
+                    data.nextUp.isEmpty)
                   const SliverFillRemaining(
                     hasScrollBody: false,
                     child: Center(
@@ -177,6 +228,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: _ContinueWatchingShelf(
                         api: widget.api,
                         items: data.resume,
+                        onTap: _open,
+                      ),
+                    ),
+                  if (data.nextUp.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: _MediaShelf(
+                        api: widget.api,
+                        shelf: _Shelf('A seguir', data.nextUp),
                         onTap: _open,
                       ),
                     ),
@@ -204,10 +263,14 @@ class _Header extends StatelessWidget {
     required this.session,
     required this.onLogout,
     required this.onRefreshTitles,
+    required this.onSwitchProfile,
+    required this.onPrepareServer,
   });
   final JellyfinSession session;
   final VoidCallback onLogout;
   final Future<void> Function() onRefreshTitles;
+  final VoidCallback onSwitchProfile;
+  final Future<void> Function() onPrepareServer;
 
   @override
   Widget build(BuildContext context) {
@@ -226,8 +289,26 @@ class _Header extends StatelessWidget {
             onSelected: (value) {
               if (value == 'logout') onLogout();
               if (value == 'refresh_titles') onRefreshTitles();
+              if (value == 'switch_profile') onSwitchProfile();
+              if (value == 'prepare_server') onPrepareServer();
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'switch_profile',
+                child: ListTile(
+                  leading: Icon(Icons.switch_account_rounded),
+                  title: Text('Trocar perfil'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'prepare_server',
+                child: ListTile(
+                  leading: Icon(Icons.auto_awesome_motion_rounded),
+                  title: Text('Preparar aberturas e miniaturas'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
               PopupMenuItem(
                 value: 'refresh_titles',
                 child: ListTile(
@@ -590,7 +671,12 @@ class _Shelf {
 }
 
 class _HomeData {
-  const _HomeData({this.resume = const [], this.shelves = const []});
+  const _HomeData({
+    this.resume = const [],
+    this.nextUp = const [],
+    this.shelves = const [],
+  });
   final List<MediaItem> resume;
+  final List<MediaItem> nextUp;
   final List<_Shelf> shelves;
 }

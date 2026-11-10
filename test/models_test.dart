@@ -1,5 +1,6 @@
 import 'package:casaflix/src/models/jellyfin_session.dart';
 import 'package:casaflix/src/models/media_item.dart';
+import 'package:casaflix/src/models/playback.dart';
 import 'package:casaflix/src/services/jellyfin_api.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -102,5 +103,71 @@ void main() {
     final headers = JellyfinApi(session: session).authHeaders;
 
     expect(headers['Accept-Language'], startsWith('pt-BR'));
+  });
+
+  test('playback quality changes bitrate and resolution', () {
+    const session = JellyfinSession(
+      baseUrl: 'https://netpobre.example.ts.net',
+      token: 'token',
+      userId: 'user-1',
+      userName: 'netpobre',
+      serverName: 'NetPobre',
+    );
+    const item = MediaItem(id: 'video-1', name: 'Filme', type: 'Movie');
+    final api = JellyfinApi(session: session);
+
+    final economy = api.playbackUrl(item, quality: PlaybackQuality.economy);
+    final home = api.playbackUrl(item, quality: PlaybackQuality.home);
+
+    expect(economy.queryParameters['MaxHeight'], '480');
+    expect(home.queryParameters['MaxHeight'], '1080');
+    expect(home.queryParameters['MaxStreamingBitrate'], '8000000');
+  });
+
+  test('playback info separates audio and subtitle tracks', () {
+    final info = PlaybackInfo.fromJson({
+      'PlaySessionId': 'play-1',
+      'MediaSources': [
+        {
+          'DefaultAudioStreamIndex': 1,
+          'MediaStreams': [
+            {'Index': 1, 'Type': 'Audio', 'DisplayTitle': 'Português'},
+            {'Index': 2, 'Type': 'Subtitle', 'DisplayTitle': 'Português'},
+          ],
+        },
+      ],
+    });
+
+    expect(info.audioStreams.single.index, 1);
+    expect(info.subtitleStreams.single.index, 2);
+    expect(info.defaultAudioStreamIndex, 1);
+  });
+
+  test('media segments expose the correct skip label', () {
+    final segment = MediaSegment.fromJson({
+      'Type': 'Intro',
+      'StartTicks': 100000000,
+      'EndTicks': 300000000,
+    });
+
+    expect(segment.actionLabel, 'Pular abertura');
+    expect(segment.contains(const Duration(seconds: 20)), isTrue);
+  });
+
+  test('offline download requests a mobile-compatible MP4', () {
+    const session = JellyfinSession(
+      baseUrl: 'https://netpobre.example.ts.net',
+      token: 'token',
+      userId: 'user-1',
+      userName: 'netpobre',
+      serverName: 'NetPobre',
+    );
+    const item = MediaItem(id: 'video-1', name: 'Filme', type: 'Movie');
+
+    final url = JellyfinApi(session: session).offlineDownloadUrl(item);
+
+    expect(url.path, endsWith('/stream.mp4'));
+    expect(url.queryParameters['VideoCodec'], 'h264');
+    expect(url.queryParameters['MaxHeight'], '720');
   });
 }

@@ -26,6 +26,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
   bool _busy = false;
   bool _obscure = true;
   String? _message;
+  String? _quickCode;
+  bool _cancelQuickConnect = false;
 
   @override
   void dispose() {
@@ -76,6 +78,50 @@ class _ConnectScreenState extends State<ConnectScreen> {
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _quickConnect() async {
+    setState(() {
+      _busy = true;
+      _cancelQuickConnect = false;
+      _quickCode = null;
+      _message = 'Preparando o código de acesso…';
+    });
+    try {
+      final baseUrl = _server.text.trim().isEmpty
+          ? await widget.api.discover()
+          : JellyfinApi.normalizeUrl(_server.text);
+      final code = await widget.api.initiateQuickConnect(baseUrl);
+      if (!mounted) return;
+      setState(() {
+        _quickCode = code.code;
+        _message =
+            'No celular já conectado ao Jellyfin, abra o menu e autorize este código.';
+      });
+      for (var attempt = 0; attempt < 60 && !_cancelQuickConnect; attempt++) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (_cancelQuickConnect || !mounted) return;
+        if (await widget.api.quickConnectAuthorized(code)) {
+          final session = await widget.api.authenticateQuickConnect(code);
+          widget.onConnected(session);
+          return;
+        }
+      }
+      if (mounted) setState(() => _message = 'O código expirou. Gere outro.');
+    } on JellyfinException catch (error) {
+      if (mounted) setState(() => _message = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message = 'Não foi possível gerar o código de acesso.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _quickCode = null;
+        });
+      }
     }
   }
 
@@ -180,6 +226,26 @@ class _ConnectScreenState extends State<ConnectScreen> {
                         ),
                       ),
                     ],
+                    if (_quickCode != null) ...[
+                      const SizedBox(height: 18),
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        decoration: BoxDecoration(
+                          color: CasaFlixColors.ink,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Text(
+                          _quickCode!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: CasaFlixColors.sky,
+                            fontSize: 38,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 8,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 22),
                     FilledButton.icon(
                       onPressed: _busy ? null : _login,
@@ -193,6 +259,26 @@ class _ConnectScreenState extends State<ConnectScreen> {
                             )
                           : const Icon(Icons.play_arrow_rounded),
                       label: Text(_busy ? 'Conectando…' : 'Entrar no NetPobre'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _busy
+                          ? (_quickCode == null
+                                ? null
+                                : () => setState(
+                                    () => _cancelQuickConnect = true,
+                                  ))
+                          : _quickConnect,
+                      icon: Icon(
+                        _busy && _quickCode != null
+                            ? Icons.close_rounded
+                            : Icons.tv_rounded,
+                      ),
+                      label: Text(
+                        _busy && _quickCode != null
+                            ? 'Cancelar código'
+                            : 'Entrar com código na TV',
+                      ),
                     ),
                   ],
                 ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/media_item.dart';
 import '../services/jellyfin_api.dart';
+import '../services/download_store.dart';
 import '../theme.dart';
 import 'player_screen.dart';
 
@@ -18,9 +19,75 @@ class MediaDetailsScreen extends StatefulWidget {
 class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   late MediaItem _item = widget.item;
   bool _favoriteBusy = false;
+  bool _downloaded = false;
+  bool _downloading = false;
+  double _downloadProgress = 0;
+  final _downloads = DownloadStore();
   late final Future<List<MediaItem>>? _episodes = widget.item.type == 'Series'
       ? widget.api.episodes(widget.item.id)
       : null;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkDownload();
+  }
+
+  Future<void> _checkDownload() async {
+    final downloaded = await _downloads.contains(widget.item.id);
+    if (mounted) setState(() => _downloaded = downloaded);
+  }
+
+  Future<void> _download(MediaItem item) async {
+    if (_downloading || _downloaded) return;
+    setState(() {
+      _downloading = true;
+      _downloadProgress = 0;
+    });
+    try {
+      await _downloads.download(
+        widget.api,
+        item,
+        onProgress: (progress) {
+          if (mounted) setState(() => _downloadProgress = progress);
+        },
+      );
+      if (mounted) setState(() => _downloaded = true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível concluir o download.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  Future<void> _downloadEpisode(MediaItem episode) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (await _downloads.contains(episode.id)) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Este episódio já está nos Downloads.')),
+      );
+      return;
+    }
+    messenger.showSnackBar(
+      SnackBar(content: Text('Baixando ${episode.name}…')),
+    );
+    try {
+      await _downloads.download(widget.api, episode, onProgress: (_) {});
+      messenger.showSnackBar(
+        SnackBar(content: Text('${episode.name} disponível offline.')),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível baixar o episódio.')),
+      );
+    }
+  }
 
   Future<void> _play(BuildContext context, MediaItem item) async {
     await Navigator.of(context).push(
@@ -161,6 +228,34 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
                         item.isFavorite ? 'Na minha lista' : 'Minha lista',
                       ),
                     ),
+                    if (item.playable)
+                      OutlinedButton.icon(
+                        onPressed: _downloading || _downloaded
+                            ? null
+                            : () => _download(item),
+                        icon: _downloading
+                            ? SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  value: _downloadProgress == 0
+                                      ? null
+                                      : _downloadProgress,
+                                ),
+                              )
+                            : Icon(
+                                _downloaded
+                                    ? Icons.download_done_rounded
+                                    : Icons.download_rounded,
+                              ),
+                        label: Text(
+                          _downloaded
+                              ? 'Baixado'
+                              : _downloading
+                              ? '${(_downloadProgress * 100).round()}%'
+                              : 'Baixar',
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -214,6 +309,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
                                 api: widget.api,
                                 episode: episode,
                                 onPlay: () => _play(context, episode),
+                                onDownload: () => _downloadEpisode(episode),
                               ),
                             )
                             .toList(),
@@ -235,11 +331,13 @@ class _EpisodeTile extends StatelessWidget {
     required this.api,
     required this.episode,
     required this.onPlay,
+    required this.onDownload,
   });
 
   final JellyfinApi api;
   final MediaItem episode;
   final VoidCallback onPlay;
+  final VoidCallback onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -296,9 +394,19 @@ class _EpisodeTile extends StatelessWidget {
                   ),
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.only(right: 12),
-                child: Icon(Icons.play_circle_fill_rounded),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Baixar episódio',
+                    onPressed: onDownload,
+                    icon: const Icon(Icons.download_rounded),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(right: 12),
+                    child: Icon(Icons.play_circle_fill_rounded),
+                  ),
+                ],
               ),
             ],
           ),
