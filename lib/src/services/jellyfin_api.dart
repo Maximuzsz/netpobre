@@ -19,12 +19,13 @@ class JellyfinApi {
       _client = client ?? http.Client();
 
   static const publicBaseUrl = 'https://jellyfin-casa.tailfb7f41.ts.net';
+  static const localBaseUrl = 'http://192.168.1.66:8096';
 
   static const defaultCandidates = [
-    publicBaseUrl,
+    localBaseUrl,
     'http://jellyfin-casa:8096',
     'http://jellyfin-casa.local:8096',
-    'http://192.168.1.66:8096',
+    publicBaseUrl,
   ];
 
   final JellyfinSession? _session;
@@ -49,12 +50,15 @@ class JellyfinApi {
     return result.replaceAll(RegExp(r'/+$'), '');
   }
 
-  Future<Map<String, dynamic>> publicInfo(String baseUrl) async {
+  Future<Map<String, dynamic>> publicInfo(
+    String baseUrl, {
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
     final url = normalizeUrl(baseUrl);
     try {
       final response = await _client
           .get(Uri.parse('$url/System/Info/Public'))
-          .timeout(const Duration(seconds: 4));
+          .timeout(timeout);
       if (response.statusCode != 200) {
         throw JellyfinException('Servidor respondeu ${response.statusCode}.');
       }
@@ -68,18 +72,27 @@ class JellyfinApi {
     }
   }
 
-  Future<String> discover() async {
-    for (final candidate in defaultCandidates) {
-      try {
-        await publicInfo(candidate);
-        return normalizeUrl(candidate);
-      } catch (_) {
-        // HTTPS, MagicDNS, mDNS and Tailscale IP are tried in this order.
-      }
+  Future<String> preferredBaseUrl() async {
+    try {
+      await publicInfo(
+        localBaseUrl,
+        timeout: const Duration(milliseconds: 900),
+      );
+      return localBaseUrl;
+    } catch (_) {
+      await publicInfo(publicBaseUrl);
+      return publicBaseUrl;
     }
-    throw const JellyfinException(
-      'NetPobre não encontrou o servidor. Verifique sua internet e tente novamente.',
-    );
+  }
+
+  Future<String> discover() async {
+    try {
+      return await preferredBaseUrl();
+    } catch (_) {
+      throw const JellyfinException(
+        'NetPobre não encontrou o servidor. Verifique sua internet e tente novamente.',
+      );
+    }
   }
 
   Future<JellyfinSession> authenticate({
@@ -197,8 +210,11 @@ class JellyfinApi {
         'MediaSourceId': item.id,
         'VideoCodec': 'h264',
         'AudioCodec': 'aac',
-        'MaxStreamingBitrate': '20000000',
-        'AudioBitRate': '192000',
+        'MaxStreamingBitrate': '3000000',
+        'VideoBitRate': '2600000',
+        'AudioBitRate': '128000',
+        'MaxWidth': '1280',
+        'MaxHeight': '720',
         'SegmentContainer': 'ts',
         'MinSegments': '1',
         'BreakOnNonKeyFrames': 'true',

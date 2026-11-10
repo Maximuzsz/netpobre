@@ -27,15 +27,19 @@ class _CasaFlixAppState extends State<CasaFlixApp> {
 
   Future<void> _restore() async {
     var session = await _store.read();
-    if (session != null && session.baseUrl != JellyfinApi.publicBaseUrl) {
-      session = JellyfinSession(
-        baseUrl: JellyfinApi.publicBaseUrl,
-        token: session.token,
-        userId: session.userId,
-        userName: session.userName,
-        serverName: session.serverName,
-      );
-      await _store.write(session);
+    if (session != null) {
+      try {
+        final preferredBaseUrl = await JellyfinApi().preferredBaseUrl();
+        session = JellyfinSession(
+          baseUrl: preferredBaseUrl,
+          token: session.token,
+          userId: session.userId,
+          userName: session.userName,
+          serverName: session.serverName,
+        );
+      } catch (_) {
+        // The home screen provides retry and server switching when offline.
+      }
     }
     if (!mounted) return;
     setState(() {

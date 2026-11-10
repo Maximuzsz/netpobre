@@ -46,12 +46,26 @@ void main() {
       token: 'secret',
       userId: 'user-1',
       userName: 'netpobre',
-      serverName: 'Jellyfin Casa',
+      serverName: 'NetPobre',
     );
 
-    expect(
-      JellyfinSession.fromJson(session.toJson()).serverName,
-      'Jellyfin Casa',
+    expect(JellyfinSession.fromJson(session.toJson()).serverName, 'NetPobre');
+  });
+
+  test('mobile playback is capped at a stable 720p bitrate', () {
+    const session = JellyfinSession(
+      baseUrl: 'https://netpobre.example.ts.net',
+      token: 'token',
+      userId: 'user-1',
+      userName: 'netpobre',
+      serverName: 'NetPobre',
     );
+    const item = MediaItem(id: 'video-1', name: 'Filme', type: 'Movie');
+
+    final url = JellyfinApi(session: session).playbackUrl(item);
+
+    expect(url.queryParameters['MaxStreamingBitrate'], '3000000');
+    expect(url.queryParameters['VideoBitRate'], '2600000');
+    expect(url.queryParameters['MaxHeight'], '720');
   });
 }

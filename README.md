@@ -13,11 +13,12 @@ arquivo quando o sistema solicitar.
 ## O que já funciona
 
 - conexão pública por HTTPS, sem VPN ou aplicativo auxiliar;
-- descoberta alternativa do servidor pela rede local;
+- troca automática para a conexão direta na rede local;
 - login Jellyfin e token guardado no armazenamento seguro do aparelho;
 - bibliotecas e itens recentes;
 - detalhes, sinopse, temporadas e lista de episódios;
 - reprodução HLS com transcodificação H.264/AAC pelo servidor;
+- reprodução móvel otimizada em 720p com limite de 3 Mb/s;
 
 ## Executar
 
