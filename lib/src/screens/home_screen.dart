@@ -63,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
-              debugPrint('CasaFlix: falha ao carregar: ${snapshot.error}');
+              debugPrint('NetPobre: falha ao carregar: ${snapshot.error}');
               return _HomeError(
                 onRetry: _refresh,
                 onLogout: widget.onLogout,

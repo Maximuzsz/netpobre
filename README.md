@@ -1,11 +1,12 @@
-# CasaFlix
+# NetPobre
 
-Aplicativo Flutter privado para acessar o **Jellyfin Casa** no Android e iOS.
+Aplicativo Flutter privado para acessar o servidor doméstico **NetPobre** no
+Android e iOS.
 
 ## Baixar para Android
 
 Baixe a versão mais recente em
-[CasaFlix.apk](https://github.com/Maximuzsz/casaflix/releases/latest/download/CasaFlix.apk).
+[NetPobre.apk](https://github.com/Maximuzsz/netpobre/releases/latest/download/NetPobre.apk).
 No Android, autorize a instalação de aplicativos da fonte usada para abrir o
 arquivo quando o sistema solicitar.
 

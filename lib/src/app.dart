@@ -60,7 +60,7 @@ class _CasaFlixAppState extends State<CasaFlixApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'CasaFlix',
+      title: 'NetPobre',
       theme: CasaFlixTheme.dark,
       home: _loading
           ? const _BootScreen()

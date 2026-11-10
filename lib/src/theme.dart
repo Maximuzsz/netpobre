@@ -98,7 +98,7 @@ class CasaFlixMark extends StatelessWidget {
         if (showName) ...[
           const SizedBox(width: 12),
           Text(
-            'CasaFlix',
+            'NetPobre',
             style: TextStyle(
               color: CasaFlixColors.ivory,
               fontSize: size * .72,

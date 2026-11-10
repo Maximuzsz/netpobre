@@ -78,7 +78,7 @@ class JellyfinApi {
       }
     }
     throw const JellyfinException(
-      'CasaFlix não encontrou o servidor. Verifique sua internet e tente novamente.',
+      'NetPobre não encontrou o servidor. Verifique sua internet e tente novamente.',
     );
   }
 
@@ -89,8 +89,8 @@ class JellyfinApi {
   }) async {
     final url = normalizeUrl(baseUrl);
     final authorization =
-        'MediaBrowser Client="CasaFlix", Device="Mobile", '
-        'DeviceId="casaflix-mobile", Version="1.0.0"';
+        'MediaBrowser Client="NetPobre", Device="Mobile", '
+        'DeviceId="netpobre-mobile", Version="1.2.0"';
     final response = await _client.post(
       Uri.parse('$url/Users/AuthenticateByName'),
       headers: {

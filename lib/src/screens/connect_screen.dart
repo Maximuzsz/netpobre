@@ -192,7 +192,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                               ),
                             )
                           : const Icon(Icons.play_arrow_rounded),
-                      label: Text(_busy ? 'Conectando…' : 'Entrar no CasaFlix'),
+                      label: Text(_busy ? 'Conectando…' : 'Entrar no NetPobre'),
                     ),
                   ],
                 ),

@@ -33,6 +33,7 @@ migrate_working_dir/
 /build/
 /coverage/
 /CasaFlix.apk
+/NetPobre.apk
 
 # Symbolication related
 app.*.symbols
