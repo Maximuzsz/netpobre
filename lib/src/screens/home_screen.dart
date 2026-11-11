@@ -5,6 +5,7 @@ import '../models/media_item.dart';
 import '../services/jellyfin_api.dart';
 import '../theme.dart';
 import '../widgets/app_update_dialog.dart';
+import '../widgets/tv_navigation.dart';
 import 'media_details_screen.dart';
 import 'downloads_screen.dart';
 import 'my_list_screen.dart';
@@ -17,12 +18,14 @@ class HomeScreen extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.onSwitchProfile,
+    this.isTelevision = false,
   });
 
   final JellyfinApi api;
   final JellyfinSession session;
   final VoidCallback onLogout;
   final VoidCallback onSwitchProfile;
+  final bool isTelevision;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -127,23 +130,66 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final pages = IndexedStack(
+      index: _tab,
+      children: [
+        _buildHome(),
+        SearchScreen(api: widget.api),
+        MyListScreen(key: _myListKey, api: widget.api),
+        DownloadsScreen(key: _downloadsKey),
+      ],
+    );
+    if (widget.isTelevision) {
+      return Scaffold(
+        body: SafeArea(
+          child: FocusTraversalGroup(
+            policy: ReadingOrderTraversalPolicy(),
+            child: Row(
+              children: [
+                NavigationRail(
+                  extended: true,
+                  minExtendedWidth: 196,
+                  selectedIndex: _tab,
+                  onDestinationSelected: _selectTab,
+                  leading: const Padding(
+                    padding: EdgeInsets.fromLTRB(12, 12, 12, 28),
+                    child: CasaFlixMark(size: 30, showName: false),
+                  ),
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.home_outlined),
+                      selectedIcon: Icon(Icons.home_rounded),
+                      label: Text('Início'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.search_rounded),
+                      label: Text('Buscar'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.bookmark_border_rounded),
+                      selectedIcon: Icon(Icons.bookmark_rounded),
+                      label: Text('Minha Lista'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.download_outlined),
+                      selectedIcon: Icon(Icons.download_rounded),
+                      label: Text('Downloads'),
+                    ),
+                  ],
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(child: pages),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
-      body: IndexedStack(
-        index: _tab,
-        children: [
-          _buildHome(),
-          SearchScreen(api: widget.api),
-          MyListScreen(key: _myListKey, api: widget.api),
-          DownloadsScreen(key: _downloadsKey),
-        ],
-      ),
+      body: pages,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (index) {
-          setState(() => _tab = index);
-          if (index == 2) _myListKey.currentState?.refresh();
-          if (index == 3) _downloadsKey.currentState?.refresh();
-        },
+        onDestinationSelected: _selectTab,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -167,6 +213,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  void _selectTab(int index) {
+    setState(() => _tab = index);
+    if (index == 2) _myListKey.currentState?.refresh();
+    if (index == 3) _downloadsKey.currentState?.refresh();
   }
 
   Widget _buildHome() {
@@ -356,8 +408,10 @@ class _HeroFeature extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onTap(item),
+    return TvFocusCard(
+      autofocus: true,
+      borderRadius: BorderRadius.circular(24),
+      onPressed: () => onTap(item),
       child: Container(
         height: 340,
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 26),
@@ -471,9 +525,9 @@ class _MediaShelf extends StatelessWidget {
                 final item = shelf.items[index];
                 return SizedBox(
                   width: 132,
-                  child: InkWell(
+                  child: TvFocusCard(
                     borderRadius: BorderRadius.circular(14),
-                    onTap: () => onTap(item),
+                    onPressed: () => onTap(item),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -610,9 +664,9 @@ class _ContinueWatchingShelf extends StatelessWidget {
                 final item = items[index];
                 return SizedBox(
                   width: 240,
-                  child: InkWell(
+                  child: TvFocusCard(
                     borderRadius: BorderRadius.circular(16),
-                    onTap: () => onTap(item),
+                    onPressed: () => onTap(item),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

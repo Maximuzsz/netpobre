@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../services/jellyfin_api.dart';
 import '../theme.dart';
+import 'tv_navigation.dart';
 
 class CatalogGrid extends StatelessWidget {
   const CatalogGrid({
@@ -32,20 +33,26 @@ class CatalogGrid extends StatelessWidget {
         ),
       );
     }
+    final television = TvMode.of(context);
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 120),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      padding: EdgeInsets.fromLTRB(
+        television ? 28 : 18,
+        18,
+        television ? 28 : 18,
+        television ? 48 : 120,
+      ),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: television ? 5 : 2,
         childAspectRatio: .62,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 20,
+        crossAxisSpacing: television ? 20 : 14,
+        mainAxisSpacing: television ? 24 : 20,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
-        return InkWell(
+        return TvFocusCard(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => onOpen(item),
+          onPressed: () => onOpen(item),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

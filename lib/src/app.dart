@@ -5,8 +5,10 @@ import 'screens/connect_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/profile_screen.dart';
 import 'services/jellyfin_api.dart';
+import 'services/device_capabilities.dart';
 import 'services/session_store.dart';
 import 'theme.dart';
+import 'widgets/tv_navigation.dart';
 
 class CasaFlixApp extends StatefulWidget {
   const CasaFlixApp({super.key});
@@ -21,6 +23,8 @@ class _CasaFlixAppState extends State<CasaFlixApp> {
   bool _loading = true;
   bool _choosingProfile = false;
   List<JellyfinSession> _profiles = const [];
+  bool _isTelevision = false;
+  String? _televisionConnectionMessage;
 
   @override
   void initState() {
@@ -32,6 +36,7 @@ class _CasaFlixAppState extends State<CasaFlixApp> {
     final minimumSplash = Future<void>.delayed(
       const Duration(milliseconds: 2300),
     );
+    final isTelevision = await DeviceCapabilities.isTelevision();
     var session = await _store.read();
     final profiles = await _store.readAll();
     if (session != null) {
@@ -47,11 +52,20 @@ class _CasaFlixAppState extends State<CasaFlixApp> {
       } catch (_) {
         // The home screen provides retry and server switching when offline.
       }
+    } else if (isTelevision) {
+      try {
+        session = await JellyfinApi().authenticateLocalTelevision();
+        await _store.write(session);
+      } catch (_) {
+        _televisionConnectionMessage =
+            'A TV não encontrou o servidor na rede de casa.';
+      }
     }
     await minimumSplash;
     if (!mounted) return;
     setState(() {
       _session = session;
+      _isTelevision = isTelevision;
       _profiles = profiles;
       _loading = false;
     });
@@ -102,26 +116,35 @@ class _CasaFlixAppState extends State<CasaFlixApp> {
       debugShowCheckedModeBanner: false,
       title: 'NetPobre',
       theme: CasaFlixTheme.dark,
-      home: _loading
-          ? const _BootScreen()
-          : _choosingProfile
-          ? ProfileScreen(
-              profiles: _profiles,
-              onSelected: _selectProfile,
-              onAdd: () => setState(() {
-                _session = null;
-                _choosingProfile = false;
-              }),
-              onRemove: _removeProfile,
-            )
-          : _session == null
-          ? ConnectScreen(api: JellyfinApi(), onConnected: _connected)
-          : HomeScreen(
-              api: JellyfinApi(session: _session),
-              session: _session!,
-              onLogout: _logout,
-              onSwitchProfile: () => setState(() => _choosingProfile = true),
-            ),
+      home: TvMode(
+        enabled: _isTelevision,
+        child: _loading
+            ? const _BootScreen()
+            : _choosingProfile
+            ? ProfileScreen(
+                profiles: _profiles,
+                onSelected: _selectProfile,
+                onAdd: () => setState(() {
+                  _session = null;
+                  _choosingProfile = false;
+                }),
+                onRemove: _removeProfile,
+              )
+            : _session == null
+            ? ConnectScreen(
+                api: JellyfinApi(),
+                onConnected: _connected,
+                isTelevision: _isTelevision,
+                initialMessage: _televisionConnectionMessage,
+              )
+            : HomeScreen(
+                api: JellyfinApi(session: _session),
+                session: _session!,
+                onLogout: _logout,
+                onSwitchProfile: () => setState(() => _choosingProfile = true),
+                isTelevision: _isTelevision,
+              ),
+      ),
     );
   }
 }

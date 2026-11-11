@@ -5,6 +5,7 @@ import '../services/download_manager.dart';
 import '../services/jellyfin_api.dart';
 import '../services/download_store.dart';
 import '../theme.dart';
+import '../widgets/tv_navigation.dart';
 import 'player_screen.dart';
 
 class MediaDetailsScreen extends StatefulWidget {
@@ -362,12 +363,11 @@ class _EpisodeTile extends StatelessWidget {
     final number = episode.indexNumber ?? 0;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: Material(
-        color: CasaFlixColors.deepSea,
+      child: TvFocusCard(
         borderRadius: BorderRadius.circular(18),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onPlay,
+        onPressed: onPlay,
+        child: ColoredBox(
+          color: CasaFlixColors.deepSea,
           child: Row(
             children: [
               SizedBox(

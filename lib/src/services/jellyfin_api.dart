@@ -21,6 +21,7 @@ class JellyfinApi {
 
   static const publicBaseUrl = 'https://jellyfin-casa.tailfb7f41.ts.net';
   static const localBaseUrl = 'http://192.168.1.66:8096';
+  static const localTelevisionUser = 'netpobre-tv';
 
   static const defaultCandidates = [
     localBaseUrl,
@@ -130,6 +131,15 @@ class JellyfinApi {
     }
 
     return _sessionFromAuthentication(url, response.body);
+  }
+
+  Future<JellyfinSession> authenticateLocalTelevision() async {
+    await publicInfo(localBaseUrl, timeout: const Duration(seconds: 2));
+    return authenticate(
+      baseUrl: localBaseUrl,
+      username: localTelevisionUser,
+      password: '',
+    );
   }
 
   Future<QuickConnectCode> initiateQuickConnect(String baseUrl) async {

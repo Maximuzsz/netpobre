@@ -10,10 +10,14 @@ class ConnectScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.onConnected,
+    this.isTelevision = false,
+    this.initialMessage,
   });
 
   final JellyfinApi api;
   final ValueChanged<JellyfinSession> onConnected;
+  final bool isTelevision;
+  final String? initialMessage;
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -29,6 +33,12 @@ class _ConnectScreenState extends State<ConnectScreen> {
   String? _message;
   String? _quickCode;
   bool _cancelQuickConnect = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _message = widget.initialMessage;
+  }
 
   @override
   void dispose() {
@@ -82,6 +92,25 @@ class _ConnectScreenState extends State<ConnectScreen> {
     }
   }
 
+  Future<void> _connectLocalTelevision() async {
+    setState(() {
+      _busy = true;
+      _message = 'Procurando o NetPobre na rede de casa…';
+    });
+    try {
+      final session = await widget.api.authenticateLocalTelevision();
+      widget.onConnected(session);
+    } on JellyfinException catch (error) {
+      if (mounted) setState(() => _message = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message = 'Servidor local não encontrado.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _quickConnect() async {
     setState(() {
       _busy = true;
@@ -128,6 +157,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isTelevision) return _buildTelevision(context);
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -289,6 +319,105 @@ class _ConnectScreenState extends State<ConnectScreen> {
                       icon: const Icon(Icons.system_update_alt_rounded),
                       label: const Text('Verificar atualizações'),
                     ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTelevision(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: FocusTraversalGroup(
+          policy: ReadingOrderTraversalPolicy(),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 72, vertical: 38),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CasaFlixMark(size: 58),
+                    const SizedBox(height: 34),
+                    Image.asset(
+                      'assets/branding/netpobre-mascot-splash.png',
+                      width: 164,
+                      height: 164,
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Esta TV entra sozinha',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineLarge
+                          ?.copyWith(
+                            color: CasaFlixColors.ivory,
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _message ??
+                          'Basta estar no mesmo Wi-Fi do servidor NetPobre.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: CasaFlixColors.muted,
+                        fontSize: 19,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    SizedBox(
+                      width: 430,
+                      child: FilledButton.icon(
+                        autofocus: true,
+                        onPressed: _busy ? null : _connectLocalTelevision,
+                        icon: _busy
+                            ? const SizedBox.square(
+                                dimension: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.wifi_find_rounded),
+                        label: Text(
+                          _busy ? 'Conectando…' : 'Entrar na TV de casa',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: 430,
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _quickConnect,
+                        icon: const Icon(Icons.pin_rounded),
+                        label: const Text('Usar código de acesso'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () => AppUpdateDialog.show(context),
+                      icon: const Icon(Icons.system_update_alt_rounded),
+                      label: const Text('Verificar atualização'),
+                    ),
+                    if (_quickCode != null) ...[
+                      const SizedBox(height: 18),
+                      Text(
+                        _quickCode!,
+                        style: const TextStyle(
+                          color: CasaFlixColors.amber,
+                          fontSize: 48,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 10,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
