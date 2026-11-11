@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/media_item.dart';
+import '../services/download_manager.dart';
 import '../services/jellyfin_api.dart';
 import '../services/download_store.dart';
 import '../theme.dart';
@@ -20,9 +21,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   late MediaItem _item = widget.item;
   bool _favoriteBusy = false;
   bool _downloaded = false;
+  bool _queued = false;
   bool _downloading = false;
-  double _downloadProgress = 0;
   final _downloads = DownloadStore();
+  final _downloadManager = DownloadManager.instance;
   late final Future<List<MediaItem>>? _episodes = widget.item.type == 'Series'
       ? widget.api.episodes(widget.item.id)
       : null;
@@ -34,25 +36,31 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   }
 
   Future<void> _checkDownload() async {
-    final downloaded = await _downloads.contains(widget.item.id);
-    if (mounted) setState(() => _downloaded = downloaded);
+    final legacyDownload = await _downloads.contains(widget.item.id);
+    await _downloadManager.refresh();
+    final managed = _downloadManager.downloads.value.where(
+      (entry) => entry.item.id == widget.item.id,
+    );
+    if (mounted) {
+      setState(() {
+        _downloaded = legacyDownload || managed.any((entry) => entry.complete);
+        _queued = managed.any((entry) => !entry.complete);
+      });
+    }
   }
 
   Future<void> _download(MediaItem item) async {
-    if (_downloading || _downloaded) return;
-    setState(() {
-      _downloading = true;
-      _downloadProgress = 0;
-    });
+    if (_downloading || _downloaded || _queued) return;
+    setState(() => _downloading = true);
     try {
-      await _downloads.download(
-        widget.api,
-        item,
-        onProgress: (progress) {
-          if (mounted) setState(() => _downloadProgress = progress);
-        },
+      final added = await _downloadManager.enqueue(widget.api, item);
+      if (!mounted) return;
+      setState(() => _queued = added || _queued);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Adicionado à fila. Você pode fechar o app.'),
+        ),
       );
-      if (mounted) setState(() => _downloaded = true);
     } on JellyfinException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -74,19 +82,19 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
 
   Future<void> _downloadEpisode(MediaItem episode) async {
     final messenger = ScaffoldMessenger.of(context);
-    if (await _downloads.contains(episode.id)) {
+    if (await _downloads.contains(episode.id) ||
+        await _downloadManager.contains(episode.id)) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Este episódio já está nos Downloads.')),
+        const SnackBar(
+          content: Text('Este episódio já está na fila ou nos Downloads.'),
+        ),
       );
       return;
     }
-    messenger.showSnackBar(
-      SnackBar(content: Text('Baixando ${episode.name}…')),
-    );
     try {
-      await _downloads.download(widget.api, episode, onProgress: (_) {});
+      await _downloadManager.enqueue(widget.api, episode);
       messenger.showSnackBar(
-        SnackBar(content: Text('${episode.name} disponível offline.')),
+        SnackBar(content: Text('${episode.name} foi adicionado à fila.')),
       );
     } on JellyfinException catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.message)));
@@ -238,7 +246,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
                     ),
                     if (item.playable)
                       OutlinedButton.icon(
-                        onPressed: _downloading || _downloaded
+                        onPressed: _downloading || _downloaded || _queued
                             ? null
                             : () => _download(item),
                         icon: _downloading
@@ -246,21 +254,22 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
                                 dimension: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  value: _downloadProgress == 0
-                                      ? null
-                                      : _downloadProgress,
                                 ),
                               )
                             : Icon(
                                 _downloaded
                                     ? Icons.download_done_rounded
+                                    : _queued
+                                    ? Icons.schedule_rounded
                                     : Icons.download_rounded,
                               ),
                         label: Text(
                           _downloaded
                               ? 'Baixado'
+                              : _queued
+                              ? 'Na fila'
                               : _downloading
-                              ? '${(_downloadProgress * 100).round()}%'
+                              ? 'Adicionando…'
                               : 'Baixar',
                         ),
                       ),

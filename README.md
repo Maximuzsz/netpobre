@@ -36,7 +36,8 @@ arquivo quando o sistema solicitar.
 - recomendações e faixa A seguir;
 - múltiplos perfis Jellyfin com histórico independente;
 - login por código para televisão e navegação por controle remoto;
-- downloads para reprodução offline no aparelho.
+- fila persistente de downloads para reprodução offline, com notificações,
+  pausa, retomada e tentativas automáticas mesmo fora da tela do aplicativo.
 
 ## Executar
 
