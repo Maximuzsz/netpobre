@@ -13,8 +13,8 @@ Baixe a versão mais recente em
 No Android, autorize a instalação de aplicativos da fonte usada para abrir o
 arquivo quando o sistema solicitar.
 
-Depois da primeira instalação, use **Verificar atualizações** na tela de perfis
-ou no menu da conta. O NetPobre procura a versão mais recente, baixa o APK,
+Depois da primeira instalação, use **Verificar atualizações** na tela de entrada,
+na tela de perfis ou no menu da conta. O NetPobre procura a versão mais recente, baixa o APK,
 confere sua integridade e abre a instalação sem redirecionar para o navegador.
 Na primeira atualização, o Android pode pedir uma única vez a autorização para
 o NetPobre instalar aplicativos.

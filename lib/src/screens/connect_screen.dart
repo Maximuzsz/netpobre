@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/jellyfin_session.dart';
 import '../services/jellyfin_api.dart';
 import '../theme.dart';
+import '../widgets/app_update_dialog.dart';
 
 class ConnectScreen extends StatefulWidget {
   const ConnectScreen({
@@ -279,6 +280,14 @@ class _ConnectScreenState extends State<ConnectScreen> {
                             ? 'Cancelar código'
                             : 'Entrar com código na TV',
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () => AppUpdateDialog.show(context),
+                      icon: const Icon(Icons.system_update_alt_rounded),
+                      label: const Text('Verificar atualizações'),
                     ),
                   ],
                 ),
