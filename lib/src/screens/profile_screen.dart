@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/jellyfin_session.dart';
 import '../theme.dart';
+import '../widgets/app_update_dialog.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({
@@ -50,6 +51,12 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     _AddProfileCard(onTap: onAdd),
                   ],
+                ),
+                const SizedBox(height: 38),
+                OutlinedButton.icon(
+                  onPressed: () => AppUpdateDialog.show(context),
+                  icon: const Icon(Icons.system_update_alt_rounded),
+                  label: const Text('Verificar atualizações'),
                 ),
               ],
             ),

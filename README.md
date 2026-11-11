@@ -13,6 +13,12 @@ Baixe a versão mais recente em
 No Android, autorize a instalação de aplicativos da fonte usada para abrir o
 arquivo quando o sistema solicitar.
 
+Depois da primeira instalação, use **Verificar atualizações** na tela de perfis
+ou no menu da conta. O NetPobre procura a versão mais recente, baixa o APK,
+confere sua integridade e abre a instalação sem redirecionar para o navegador.
+Na primeira atualização, o Android pode pedir uma única vez a autorização para
+o NetPobre instalar aplicativos.
+
 ## Enviar vídeos pelo notebook
 
 Baixe e abra o
@@ -24,6 +30,7 @@ Jellyfin reconhece os arquivos automaticamente.
 ## O que já funciona
 
 - conexão pública por HTTPS, sem VPN ou aplicativo auxiliar;
+- atualização do próprio aplicativo com download verificado dentro do NetPobre;
 - troca automática para a conexão direta na rede local;
 - login Jellyfin e token guardado no armazenamento seguro do aparelho;
 - bibliotecas e itens recentes;

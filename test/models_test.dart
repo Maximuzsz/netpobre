@@ -3,8 +3,38 @@ import 'package:casaflix/src/models/media_item.dart';
 import 'package:casaflix/src/models/playback.dart';
 import 'package:casaflix/src/services/jellyfin_api.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:casaflix/src/services/app_updater.dart';
 
 void main() {
+  group('AppUpdater', () {
+    test('detects a newer semantic version', () {
+      expect(
+        AppUpdater.isVersionNewer(
+          latestVersion: '1.7.0',
+          currentVersion: '1.6.1',
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not downgrade or reinstall the same version', () {
+      expect(
+        AppUpdater.isVersionNewer(
+          latestVersion: 'v1.6.1',
+          currentVersion: '1.6.1',
+        ),
+        isFalse,
+      );
+      expect(
+        AppUpdater.isVersionNewer(
+          latestVersion: '1.5.9',
+          currentVersion: '1.6.1',
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('JellyfinApi.normalizeUrl', () {
     test('adds HTTPS and removes trailing slashes', () {
       expect(

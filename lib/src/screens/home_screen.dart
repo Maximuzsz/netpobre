@@ -4,6 +4,7 @@ import '../models/jellyfin_session.dart';
 import '../models/media_item.dart';
 import '../services/jellyfin_api.dart';
 import '../theme.dart';
+import '../widgets/app_update_dialog.dart';
 import 'media_details_screen.dart';
 import 'downloads_screen.dart';
 import 'my_list_screen.dart';
@@ -291,6 +292,7 @@ class _Header extends StatelessWidget {
               if (value == 'refresh_titles') onRefreshTitles();
               if (value == 'switch_profile') onSwitchProfile();
               if (value == 'prepare_server') onPrepareServer();
+              if (value == 'check_updates') AppUpdateDialog.show(context);
             },
             itemBuilder: (_) => const [
               PopupMenuItem(
@@ -314,6 +316,14 @@ class _Header extends StatelessWidget {
                 child: ListTile(
                   leading: Icon(Icons.translate_rounded),
                   title: Text('Atualizar títulos em português'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'check_updates',
+                child: ListTile(
+                  leading: Icon(Icons.system_update_alt_rounded),
+                  title: Text('Verificar atualizações'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
