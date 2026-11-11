@@ -34,6 +34,7 @@ migrate_working_dir/
 /coverage/
 /CasaFlix.apk
 /NetPobre.apk
+/tools/uploader/netpobre-icon.ico
 
 # Symbolication related
 app.*.symbols

@@ -13,6 +13,14 @@ Baixe a versão mais recente em
 No Android, autorize a instalação de aplicativos da fonte usada para abrir o
 arquivo quando o sistema solicitar.
 
+## Enviar vídeos pelo notebook
+
+Baixe e abra o
+[NetPobre-Enviar.exe](https://github.com/Maximuzsz/netpobre/releases/latest/download/NetPobre-Enviar.exe).
+Escolha `Filmes`, `Séries` ou `Vídeos pessoais`, selecione arquivos ou uma
+pasta inteira e clique em **Enviar agora**. O programa mostra o progresso e o
+Jellyfin reconhece os arquivos automaticamente.
+
 ## O que já funciona
 
 - conexão pública por HTTPS, sem VPN ou aplicativo auxiliar;
