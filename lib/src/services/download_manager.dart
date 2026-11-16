@@ -203,6 +203,37 @@ class DownloadManager {
     await _downloader.resumeAll(group: group);
   }
 
+  Future<Set<String>> pauseActiveForPlayback() async {
+    if (!_initialized) await initialize();
+    await refresh();
+    final active = downloads.value.where(
+      (entry) =>
+          entry.status == TaskStatus.running ||
+          entry.status == TaskStatus.waitingToRetry,
+    );
+    final paused = <String>{};
+    for (final entry in active) {
+      if (await _downloader.pause(entry.task)) {
+        paused.add(entry.record.taskId);
+      }
+    }
+    if (paused.isNotEmpty) await refresh();
+    return paused;
+  }
+
+  Future<void> resumeAfterPlayback(Set<String> taskIds) async {
+    if (taskIds.isEmpty) return;
+    if (!_initialized) await initialize();
+    await refresh();
+    for (final entry in downloads.value) {
+      if (taskIds.contains(entry.record.taskId) &&
+          entry.status == TaskStatus.paused) {
+        await _downloader.resume(entry.task);
+      }
+    }
+    await refresh();
+  }
+
   void _scheduleEmit() {
     _emitTimer?.cancel();
     _emitTimer = Timer(const Duration(milliseconds: 100), _emit);

@@ -496,6 +496,7 @@ class JellyfinApi {
   Uri playbackUrl(
     MediaItem item, {
     PlaybackQuality quality = PlaybackQuality.automatic,
+    String? mediaSourceId,
     int? audioStreamIndex,
     int? subtitleStreamIndex,
   }) {
@@ -514,7 +515,7 @@ class JellyfinApi {
     ).replace(
       queryParameters: {
         'UserId': session.userId,
-        'MediaSourceId': item.id,
+        'MediaSourceId': mediaSourceId ?? item.id,
         'VideoCodec': 'h264',
         'AudioCodec': 'aac',
         'MaxStreamingBitrate': maxBitrate,
@@ -525,6 +526,8 @@ class JellyfinApi {
         if (audioStreamIndex != null) 'AudioStreamIndex': '$audioStreamIndex',
         if (subtitleStreamIndex != null)
           'SubtitleStreamIndex': '$subtitleStreamIndex',
+        if (subtitleStreamIndex != null && subtitleStreamIndex >= 0)
+          'SubtitleMethod': 'Encode',
         'SegmentContainer': 'ts',
         'MinSegments': '1',
         'BreakOnNonKeyFrames': 'true',

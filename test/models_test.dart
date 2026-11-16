@@ -159,6 +159,7 @@ void main() {
       'PlaySessionId': 'play-1',
       'MediaSources': [
         {
+          'Id': 'source-1',
           'DefaultAudioStreamIndex': 1,
           'MediaStreams': [
             {'Index': 1, 'Type': 'Audio', 'DisplayTitle': 'Português'},
@@ -171,6 +172,31 @@ void main() {
     expect(info.audioStreams.single.index, 1);
     expect(info.subtitleStreams.single.index, 2);
     expect(info.defaultAudioStreamIndex, 1);
+    expect(info.mediaSourceId, 'source-1');
+  });
+
+  test('selected subtitles are burned into the HLS stream', () {
+    const session = JellyfinSession(
+      baseUrl: 'http://192.168.1.66:8096',
+      token: 'token',
+      userId: 'user-1',
+      userName: 'netpobre',
+      serverName: 'NetPobre',
+    );
+    const item = MediaItem(id: 'video-1', name: 'Série', type: 'Episode');
+
+    final enabled = JellyfinApi(
+      session: session,
+    ).playbackUrl(item, mediaSourceId: 'source-1', subtitleStreamIndex: 4);
+    final disabled = JellyfinApi(
+      session: session,
+    ).playbackUrl(item, subtitleStreamIndex: -1);
+
+    expect(enabled.queryParameters['MediaSourceId'], 'source-1');
+    expect(enabled.queryParameters['SubtitleStreamIndex'], '4');
+    expect(enabled.queryParameters['SubtitleMethod'], 'Encode');
+    expect(disabled.queryParameters['SubtitleStreamIndex'], '-1');
+    expect(disabled.queryParameters.containsKey('SubtitleMethod'), isFalse);
   });
 
   test('media segments expose the correct skip label', () {

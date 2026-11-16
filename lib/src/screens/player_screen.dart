@@ -6,6 +6,8 @@ import 'package:video_player/video_player.dart';
 
 import '../models/media_item.dart';
 import '../models/playback.dart';
+import '../services/device_capabilities.dart';
+import '../services/download_manager.dart';
 import '../services/jellyfin_api.dart';
 import '../theme.dart';
 
@@ -38,18 +40,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _autoplayTimer;
   int? _autoplaySeconds;
   Duration? _seekPreview;
+  final _downloadManager = DownloadManager.instance;
+  Set<String> _downloadsPausedForPlayback = const {};
 
   VideoPlayerValue? get _value => _controller?.value;
 
   @override
   void initState() {
     super.initState();
+    DeviceCapabilities.pictureInPicture.addListener(_pictureInPictureChanged);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    _loadItem(_item);
+    unawaited(DeviceCapabilities.setKeepScreenOn(true));
+    _startPlayback();
+  }
+
+  void _pictureInPictureChanged() {
+    if (!mounted) return;
+    setState(() {
+      _controls = !DeviceCapabilities.pictureInPicture.value;
+    });
+  }
+
+  Future<void> _startPlayback() async {
+    try {
+      _downloadsPausedForPlayback = await _downloadManager
+          .pauseActiveForPlayback();
+    } catch (error) {
+      debugPrint('NetPobre: não foi possível pausar downloads: $error');
+    }
+    if (mounted) await _loadItem(_item);
   }
 
   Future<void> _loadItem(MediaItem item, {Duration? startAt}) async {
@@ -109,6 +132,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         widget.api.playbackUrl(
           item,
           quality: _quality,
+          mediaSourceId: _playbackInfo.mediaSourceId,
           audioStreamIndex: _audioStreamIndex,
           subtitleStreamIndex: _subtitleStreamIndex,
         ),
@@ -133,8 +157,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       );
       await controller.play();
+      unawaited(
+        DeviceCapabilities.setPictureInPictureEnabled(
+          true,
+          aspectRatio: controller.value.aspectRatio,
+        ),
+      );
       if (mounted) setState(() => _loading = false);
-    } catch (_) {
+    } catch (error) {
+      debugPrint('NetPobre: falha ao iniciar reprodução: $error');
       if (mounted) {
         setState(() {
           _loading = false;
@@ -349,6 +380,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _autoplayTimer?.cancel();
+    DeviceCapabilities.pictureInPicture.removeListener(
+      _pictureInPictureChanged,
+    );
     final controller = _controller;
     controller?.removeListener(_tick);
     if (_started && controller != null) {
@@ -361,8 +395,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
     controller?.dispose();
+    if (_downloadsPausedForPlayback.isNotEmpty) {
+      unawaited(
+        _downloadManager
+            .resumeAfterPlayback(_downloadsPausedForPlayback)
+            .catchError((_) {}),
+      );
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    unawaited(DeviceCapabilities.setKeepScreenOn(false));
+    unawaited(DeviceCapabilities.setPictureInPictureEnabled(false));
     super.dispose();
   }
 

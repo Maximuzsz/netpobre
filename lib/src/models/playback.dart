@@ -46,6 +46,7 @@ class MediaStreamInfo {
 class PlaybackInfo {
   const PlaybackInfo({
     this.playSessionId,
+    this.mediaSourceId,
     this.audioStreams = const [],
     this.subtitleStreams = const [],
     this.defaultAudioStreamIndex,
@@ -53,6 +54,7 @@ class PlaybackInfo {
   });
 
   final String? playSessionId;
+  final String? mediaSourceId;
   final List<MediaStreamInfo> audioStreams;
   final List<MediaStreamInfo> subtitleStreams;
   final int? defaultAudioStreamIndex;
@@ -69,6 +71,7 @@ class PlaybackInfo {
         .toList();
     return PlaybackInfo(
       playSessionId: json['PlaySessionId'] as String?,
+      mediaSourceId: source['Id'] as String?,
       audioStreams: streams.where((stream) => stream.type == 'Audio').toList(),
       subtitleStreams: streams
           .where((stream) => stream.type == 'Subtitle')
