@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/media_item.dart';
 import 'jellyfin_api.dart';
@@ -33,6 +34,10 @@ class DownloadManager {
 
   static final instance = DownloadManager._();
   static const group = 'netpobre_media';
+  static const _playbackPauseFileName =
+      'netpobre_playback_paused_downloads.json';
+  static const _legacyRecoveryFileName =
+      'netpobre_download_recovery_1_8_2.done';
 
   final ValueNotifier<List<ManagedDownload>> downloads = ValueNotifier(
     const [],
@@ -100,6 +105,8 @@ class DownloadManager {
       await _downloader.start(autoCleanDatabase: false);
       _initialized = true;
       await refresh();
+      await _recoverPlaybackPausedDownloads();
+      await _recoverDownloadsPausedByPreviousVersion();
     } catch (_) {
       await _databaseSubscription?.cancel();
       _databaseSubscription = null;
@@ -167,11 +174,27 @@ class DownloadManager {
 
   Future<bool> pause(ManagedDownload entry) => _downloader.pause(entry.task);
 
-  Future<bool> resume(ManagedDownload entry) => _downloader.resume(entry.task);
+  Future<bool> resume(ManagedDownload entry) => _resumeOrRestart(entry);
 
-  Future<bool> retry(ManagedDownload entry) async {
-    if (await _downloader.resume(entry.task)) return true;
+  Future<bool> retry(ManagedDownload entry) => _resumeOrRestart(entry);
+
+  Future<bool> _resumeOrRestart(ManagedDownload entry) async {
+    try {
+      if (await _downloader.resume(entry.task)) return true;
+    } catch (_) {
+      // A partial file can become invalid after Android stops the process.
+      // Restarting the same media is safer than leaving a stuck queue entry.
+    }
+    try {
+      return await _restart(entry);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _restart(ManagedDownload entry) async {
     _removedTaskIds.add(entry.record.taskId);
+    await _downloader.cancel(entry.task);
     await _downloader.database.deleteRecordWithId(entry.record.taskId);
     final replacement = entry.task.copyWith(
       taskId:
@@ -200,7 +223,14 @@ class DownloadManager {
   }
 
   Future<void> resumeAll() async {
-    await _downloader.resumeAll(group: group);
+    if (!_initialized) await initialize();
+    await refresh();
+    for (final entry in downloads.value.where(
+      (entry) => entry.status == TaskStatus.paused,
+    )) {
+      await _resumeOrRestart(entry);
+    }
+    await refresh();
   }
 
   Future<Set<String>> pauseActiveForPlayback() async {
@@ -211,12 +241,20 @@ class DownloadManager {
           entry.status == TaskStatus.running ||
           entry.status == TaskStatus.waitingToRetry,
     );
+    final markerIds = await _readPlaybackPauseIds();
+    final candidates = active.map((entry) => entry.record.taskId).toSet();
+    await _writePlaybackPauseIds({...markerIds, ...candidates});
     final paused = <String>{};
     for (final entry in active) {
-      if (await _downloader.pause(entry.task)) {
-        paused.add(entry.record.taskId);
+      try {
+        if (await _downloader.pause(entry.task)) {
+          paused.add(entry.record.taskId);
+        }
+      } catch (_) {
+        // The final marker below removes tasks that were not paused.
       }
     }
+    await _writePlaybackPauseIds({...markerIds, ...paused});
     if (paused.isNotEmpty) await refresh();
     return paused;
   }
@@ -225,13 +263,82 @@ class DownloadManager {
     if (taskIds.isEmpty) return;
     if (!_initialized) await initialize();
     await refresh();
+    final storedIds = await _readPlaybackPauseIds();
+    final remaining = storedIds.difference(taskIds);
     for (final entry in downloads.value) {
       if (taskIds.contains(entry.record.taskId) &&
           entry.status == TaskStatus.paused) {
-        await _downloader.resume(entry.task);
+        if (await _resumeOrRestart(entry)) {
+          remaining.remove(entry.record.taskId);
+        } else {
+          remaining.add(entry.record.taskId);
+        }
+      } else if (taskIds.contains(entry.record.taskId)) {
+        remaining.remove(entry.record.taskId);
       }
     }
+    await _writePlaybackPauseIds(remaining);
     await refresh();
+  }
+
+  Future<void> _recoverPlaybackPausedDownloads() async {
+    final taskIds = await _readPlaybackPauseIds();
+    if (taskIds.isEmpty) return;
+    await resumeAfterPlayback(taskIds);
+  }
+
+  Future<void> _recoverDownloadsPausedByPreviousVersion() async {
+    final directory = await getApplicationSupportDirectory();
+    final marker = File(
+      '${directory.path}${Platform.pathSeparator}$_legacyRecoveryFileName',
+    );
+    if (await marker.exists()) return;
+
+    // 1.8.1 could lose the in-memory list when Android closed the player/app.
+    // Resume paused records once so existing affected installations self-heal.
+    await refresh();
+    var recovered = true;
+    for (final entry in downloads.value.where(
+      (entry) => entry.status == TaskStatus.paused,
+    )) {
+      if (!await _resumeOrRestart(entry)) recovered = false;
+    }
+    if (recovered) {
+      await marker.parent.create(recursive: true);
+      await marker.writeAsString('recovered');
+    }
+    await refresh();
+  }
+
+  Future<File> _playbackPauseFile() async {
+    final directory = await getApplicationSupportDirectory();
+    return File(
+      '${directory.path}${Platform.pathSeparator}$_playbackPauseFileName',
+    );
+  }
+
+  Future<Set<String>> _readPlaybackPauseIds() async {
+    try {
+      final file = await _playbackPauseFile();
+      if (!await file.exists()) return <String>{};
+      final values = jsonDecode(await file.readAsString()) as List<dynamic>;
+      return values.whereType<String>().toSet();
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
+  Future<void> _writePlaybackPauseIds(Set<String> taskIds) async {
+    final file = await _playbackPauseFile();
+    if (taskIds.isEmpty) {
+      if (await file.exists()) await file.delete();
+      return;
+    }
+    await file.parent.create(recursive: true);
+    final temporary = File('${file.path}.tmp');
+    await temporary.writeAsString(jsonEncode(taskIds.toList()..sort()));
+    if (await file.exists()) await file.delete();
+    await temporary.rename(file.path);
   }
 
   void _scheduleEmit() {
