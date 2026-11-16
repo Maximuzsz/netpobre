@@ -38,6 +38,8 @@ class DownloadManager {
       'netpobre_playback_paused_downloads.json';
   static const _legacyRecoveryFileName =
       'netpobre_download_recovery_1_8_2.done';
+  static const _canceledRecoveryFileName =
+      'netpobre_download_recovery_1_9_1.done';
 
   final ValueNotifier<List<ManagedDownload>> downloads = ValueNotifier(
     const [],
@@ -107,6 +109,7 @@ class DownloadManager {
       await refresh();
       await _recoverPlaybackPausedDownloads();
       await _recoverDownloadsPausedByPreviousVersion();
+      await _recoverDownloadsCanceledByPreviousVersion();
     } catch (_) {
       await _databaseSubscription?.cancel();
       _databaseSubscription = null;
@@ -155,7 +158,9 @@ class DownloadManager {
       updates: Updates.statusAndProgress,
       retries: 3,
       allowPause: true,
-      priority: 0,
+      // Large media already runs in a foreground service. Avoid Android's
+      // special UIDT path, which some devices cancel while changing apps.
+      priority: 5,
       metaData: jsonEncode(item.toJson()),
       displayName: item.seriesName == null
           ? item.name
@@ -201,6 +206,7 @@ class DownloadManager {
           'netpobre_${entry.item.id}_${DateTime.now().millisecondsSinceEpoch}',
       creationTime: DateTime.now(),
       retries: 3,
+      priority: 5,
     );
     final accepted = await _downloader.enqueue(replacement);
     await refresh();
@@ -267,7 +273,10 @@ class DownloadManager {
     final remaining = storedIds.difference(taskIds);
     for (final entry in downloads.value) {
       if (taskIds.contains(entry.record.taskId) &&
-          entry.status == TaskStatus.paused) {
+          (entry.status == TaskStatus.paused ||
+              entry.status == TaskStatus.failed ||
+              entry.status == TaskStatus.canceled ||
+              entry.status == TaskStatus.notFound)) {
         if (await _resumeOrRestart(entry)) {
           remaining.remove(entry.record.taskId);
         } else {
@@ -300,6 +309,29 @@ class DownloadManager {
     var recovered = true;
     for (final entry in downloads.value.where(
       (entry) => entry.status == TaskStatus.paused,
+    )) {
+      if (!await _resumeOrRestart(entry)) recovered = false;
+    }
+    if (recovered) {
+      await marker.parent.create(recursive: true);
+      await marker.writeAsString('recovered');
+    }
+    await refresh();
+  }
+
+  Future<void> _recoverDownloadsCanceledByPreviousVersion() async {
+    final directory = await getApplicationSupportDirectory();
+    final marker = File(
+      '${directory.path}${Platform.pathSeparator}$_canceledRecoveryFileName',
+    );
+    if (await marker.exists()) return;
+
+    await refresh();
+    var recovered = true;
+    for (final entry in downloads.value.where(
+      (entry) =>
+          entry.status == TaskStatus.failed ||
+          entry.status == TaskStatus.canceled,
     )) {
       if (!await _resumeOrRestart(entry)) recovered = false;
     }

@@ -388,13 +388,24 @@ class _QueueCard extends StatelessWidget {
     TaskStatus.waitingToRetry => 'Conexão instável · tentando novamente',
     TaskStatus.paused => 'Pausado · toque em continuar',
     TaskStatus.notFound => 'O arquivo não foi encontrado no servidor',
-    TaskStatus.failed =>
-      entry.record.exception?.description.isNotEmpty == true
-          ? entry.record.exception!.description
-          : 'O download foi interrompido',
+    TaskStatus.failed => _failureText(entry.record.exception?.description),
     TaskStatus.canceled => 'Cancelado',
     TaskStatus.complete => 'Concluído',
   };
+
+  String _failureText(String? description) {
+    final normalized = description?.toLowerCase() ?? '';
+    if (normalized.contains('cancel')) {
+      return 'Interrompido pelo Android · toque para retomar';
+    }
+    if (normalized.contains('timed out') || normalized.contains('timeout')) {
+      return 'A conexão demorou demais · toque para retomar';
+    }
+    if (normalized.contains('space') || normalized.contains('storage')) {
+      return 'Sem espaço suficiente no aparelho';
+    }
+    return 'Download interrompido · toque para tentar novamente';
+  }
 }
 
 class _CompletedTile extends StatelessWidget {
