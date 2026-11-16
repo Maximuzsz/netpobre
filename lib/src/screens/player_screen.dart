@@ -38,10 +38,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Duration _lastReported = Duration.zero;
   String? _error;
   Timer? _autoplayTimer;
+  StreamSubscription<PictureInPictureAction>? _pictureInPictureAction;
   int? _autoplaySeconds;
   Duration? _seekPreview;
   final _downloadManager = DownloadManager.instance;
   Set<String> _downloadsPausedForPlayback = const {};
+  bool? _lastPictureInPicturePlaying;
 
   VideoPlayerValue? get _value => _controller?.value;
 
@@ -49,6 +51,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     DeviceCapabilities.pictureInPicture.addListener(_pictureInPictureChanged);
+    _pictureInPictureAction = DeviceCapabilities.pictureInPictureActions.listen(
+      _handlePictureInPictureAction,
+    );
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -63,6 +68,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() {
       _controls = !DeviceCapabilities.pictureInPicture.value;
     });
+  }
+
+  void _handlePictureInPictureAction(PictureInPictureAction action) {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    switch (action) {
+      case PictureInPictureAction.play:
+        unawaited(controller.play());
+      case PictureInPictureAction.pause:
+        unawaited(controller.pause());
+    }
+  }
+
+  Future<void> _enterPictureInPicture() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    await DeviceCapabilities.setPictureInPictureEnabled(
+      true,
+      aspectRatio: controller.value.aspectRatio,
+    );
+    await DeviceCapabilities.setPictureInPicturePlaying(
+      controller.value.isPlaying,
+    );
+    final entered = await DeviceCapabilities.enterPictureInPicture();
+    if (!entered && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('O modo miniatura não está disponível neste aparelho.'),
+        ),
+      );
+    }
   }
 
   Future<void> _startPlayback() async {
@@ -163,6 +199,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
           aspectRatio: controller.value.aspectRatio,
         ),
       );
+      unawaited(
+        DeviceCapabilities.setPictureInPicturePlaying(
+          controller.value.isPlaying,
+        ),
+      );
       if (mounted) setState(() => _loading = false);
     } catch (error) {
       debugPrint('NetPobre: falha ao iniciar reprodução: $error');
@@ -180,6 +221,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final controller = _controller;
     if (controller == null) return;
     final value = controller.value;
+    if (_lastPictureInPicturePlaying != value.isPlaying) {
+      _lastPictureInPicturePlaying = value.isPlaying;
+      unawaited(DeviceCapabilities.setPictureInPicturePlaying(value.isPlaying));
+    }
     if (_started &&
         (value.position - _lastReported).abs() >= const Duration(seconds: 10)) {
       _lastReported = value.position;
@@ -383,6 +428,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     DeviceCapabilities.pictureInPicture.removeListener(
       _pictureInPictureChanged,
     );
+    unawaited(_pictureInPictureAction?.cancel());
     final controller = _controller;
     controller?.removeListener(_tick);
     if (_started && controller != null) {
@@ -461,6 +507,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       ? controller!.pause()
                       : controller!.play(),
                   onSettings: _showPlaybackSettings,
+                  onPictureInPicture: _enterPictureInPicture,
                   seekPreview: _seekPreview,
                   onSeekPreview: (position) =>
                       setState(() => _seekPreview = position),
@@ -509,6 +556,7 @@ class _PlayerControls extends StatelessWidget {
     required this.onSeekForward,
     required this.onPlayPause,
     required this.onSettings,
+    required this.onPictureInPicture,
     required this.seekPreview,
     required this.onSeekPreview,
     required this.onSeekEnd,
@@ -523,6 +571,7 @@ class _PlayerControls extends StatelessWidget {
   final VoidCallback onSeekForward;
   final VoidCallback onPlayPause;
   final VoidCallback onSettings;
+  final VoidCallback onPictureInPicture;
   final Duration? seekPreview;
   final ValueChanged<Duration> onSeekPreview;
   final ValueChanged<Duration> onSeekEnd;
@@ -567,6 +616,11 @@ class _PlayerControls extends StatelessWidget {
                         ),
                     ],
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Abrir modo miniatura',
+                  onPressed: onPictureInPicture,
+                  icon: const Icon(Icons.picture_in_picture_alt_rounded),
                 ),
                 IconButton(
                   tooltip: 'Áudio, legenda e qualidade',

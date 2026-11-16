@@ -1,9 +1,15 @@
 package com.casaflix.casaflix
 
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.content.res.Configuration
+import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
 import android.app.UiModeManager
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -18,11 +24,25 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private var pendingApkPath: String? = null
     private var pictureInPictureEnabled = false
+    private var pictureInPicturePlaying = true
+    private var pictureInPictureWidth = 16
+    private var pictureInPictureHeight = 9
+    private var pictureInPictureReceiverRegistered = false
     private lateinit var deviceChannel: MethodChannel
+    private val pictureInPictureReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != PICTURE_IN_PICTURE_CONTROL) return
+            val action = intent.getStringExtra(PICTURE_IN_PICTURE_ACTION) ?: return
+            if (::deviceChannel.isInitialized) {
+                deviceChannel.invokeMethod("pictureInPictureAction", action)
+            }
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         deviceChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CHANNEL)
+        registerPictureInPictureReceiver()
         deviceChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "isTelevision" -> {
@@ -47,8 +67,41 @@ class MainActivity : FlutterActivity() {
                         requested && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
                     val width = call.argument<Int>("width") ?: 16
                     val height = call.argument<Int>("height") ?: 9
+                    pictureInPictureWidth = width
+                    pictureInPictureHeight = height
                     updatePictureInPictureParams(width, height)
                     result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+                }
+                "setPictureInPicturePlaying" -> {
+                    pictureInPicturePlaying = call.argument<Boolean>("playing") ?: true
+                    updatePictureInPictureParams(
+                        pictureInPictureWidth,
+                        pictureInPictureHeight
+                    )
+                    result.success(null)
+                }
+                "enterPictureInPicture" -> {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N ||
+                        !pictureInPictureEnabled ||
+                        isInPictureInPictureMode
+                    ) {
+                        result.success(isInPictureInPictureMode)
+                    } else {
+                        val entered = runCatching {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                enterPictureInPictureMode(
+                                    currentPictureInPictureParams(
+                                        pictureInPictureWidth,
+                                        pictureInPictureHeight
+                                    )
+                                )
+                            } else {
+                                @Suppress("DEPRECATION")
+                                enterPictureInPictureMode()
+                            }
+                        }.getOrDefault(false)
+                        result.success(entered)
+                    }
                 }
                 else -> result.notImplemented()
             }
@@ -101,6 +154,14 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onDestroy() {
+        if (pictureInPictureReceiverRegistered) {
+            unregisterReceiver(pictureInPictureReceiver)
+            pictureInPictureReceiverRegistered = false
+        }
+        super.onDestroy()
+    }
+
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N ||
@@ -110,7 +171,12 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT in Build.VERSION_CODES.N until Build.VERSION_CODES.S) {
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    enterPictureInPictureMode(currentPictureInPictureParams(16, 9))
+                    enterPictureInPictureMode(
+                        currentPictureInPictureParams(
+                            pictureInPictureWidth,
+                            pictureInPictureHeight
+                        )
+                    )
                 } else {
                     @Suppress("DEPRECATION")
                     enterPictureInPictureMode()
@@ -136,6 +202,7 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val builder = PictureInPictureParams.Builder()
             .setAspectRatio(safeAspectRatio(width, height))
+            .setActions(listOf(pictureInPictureAction()))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setAutoEnterEnabled(pictureInPictureEnabled)
             builder.setSeamlessResizeEnabled(true)
@@ -146,7 +213,49 @@ class MainActivity : FlutterActivity() {
     private fun currentPictureInPictureParams(width: Int, height: Int): PictureInPictureParams =
         PictureInPictureParams.Builder()
             .setAspectRatio(safeAspectRatio(width, height))
+            .setActions(listOf(pictureInPictureAction()))
             .build()
+
+    private fun pictureInPictureAction(): RemoteAction {
+        val action = if (pictureInPicturePlaying) "pause" else "play"
+        val title = if (pictureInPicturePlaying) "Pausar" else "Reproduzir"
+        val icon = if (pictureInPicturePlaying) {
+            android.R.drawable.ic_media_pause
+        } else {
+            android.R.drawable.ic_media_play
+        }
+        val intent = Intent(PICTURE_IN_PICTURE_CONTROL)
+            .setPackage(packageName)
+            .putExtra(PICTURE_IN_PICTURE_ACTION, action)
+        val pendingIntent = PendingIntent.getBroadcast(
+            this,
+            if (pictureInPicturePlaying) 1 else 2,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return RemoteAction(
+            Icon.createWithResource(this, icon),
+            title,
+            title,
+            pendingIntent
+        )
+    }
+
+    private fun registerPictureInPictureReceiver() {
+        if (pictureInPictureReceiverRegistered) return
+        val filter = IntentFilter(PICTURE_IN_PICTURE_CONTROL)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(
+                pictureInPictureReceiver,
+                filter,
+                Context.RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(pictureInPictureReceiver, filter)
+        }
+        pictureInPictureReceiverRegistered = true
+    }
 
     private fun safeAspectRatio(width: Int, height: Int): Rational {
         val safeWidth = width.coerceAtLeast(1)
@@ -182,5 +291,8 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "netpobre/app_update"
         private const val DEVICE_CHANNEL = "netpobre/device"
+        private const val PICTURE_IN_PICTURE_CONTROL =
+            "com.casaflix.casaflix.PICTURE_IN_PICTURE_CONTROL"
+        private const val PICTURE_IN_PICTURE_ACTION = "action"
     }
 }

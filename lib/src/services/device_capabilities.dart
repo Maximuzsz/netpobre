@@ -1,16 +1,34 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
+enum PictureInPictureAction { play, pause }
 
 abstract final class DeviceCapabilities {
   static const _channel = MethodChannel('netpobre/device');
   static final ValueNotifier<bool> pictureInPicture = ValueNotifier(false);
+  static final StreamController<PictureInPictureAction>
+  _pictureInPictureActions = StreamController.broadcast();
   static bool _handlerReady = false;
+
+  static Stream<PictureInPictureAction> get pictureInPictureActions {
+    _ensureHandler();
+    return _pictureInPictureActions.stream;
+  }
 
   static void _ensureHandler() {
     if (_handlerReady) return;
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'pictureInPictureChanged') {
         pictureInPicture.value = call.arguments == true;
+      } else if (call.method == 'pictureInPictureAction') {
+        switch (call.arguments) {
+          case 'play':
+            _pictureInPictureActions.add(PictureInPictureAction.play);
+          case 'pause':
+            _pictureInPictureActions.add(PictureInPictureAction.pause);
+        }
       }
     });
     _handlerReady = true;
@@ -56,6 +74,31 @@ abstract final class DeviceCapabilities {
       return false;
     } on PlatformException {
       return false;
+    }
+  }
+
+  static Future<bool> enterPictureInPicture() async {
+    _ensureHandler();
+    try {
+      return await _channel.invokeMethod<bool>('enterPictureInPicture') ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  static Future<void> setPictureInPicturePlaying(bool playing) async {
+    _ensureHandler();
+    try {
+      await _channel.invokeMethod<void>('setPictureInPicturePlaying', {
+        'playing': playing,
+      });
+    } on MissingPluginException {
+      // Picture-in-picture is available only on supported Android devices.
+    } on PlatformException {
+      // Playback remains usable if the floating action cannot be updated.
     }
   }
 }
